@@ -11,6 +11,8 @@ public sealed class LineConfiguration
 
 public sealed class LineInfo
 {
+    public string Id { get; init; } = string.Empty;
+
     public required string NameJp { get; init; }
 
     public required string NameEn { get; init; }
@@ -40,6 +42,8 @@ public sealed class StationInfo
     public required string NameEn { get; init; }
 
     public string? Code { get; init; }
+
+    public Dictionary<string, List<string>> Pa { get; init; } = [];
 
     public List<string> Melody { get; init; } = [];
 

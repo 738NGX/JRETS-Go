@@ -1,7 +1,10 @@
 ﻿using System.IO;
 using System.Linq;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows.Interop;
 using System.Windows;
 using System.Windows.Media;
@@ -11,6 +14,7 @@ using JRETS.Go.App.Interop;
 using JRETS.Go.Core.Configuration;
 using JRETS.Go.Core.Runtime;
 using JRETS.Go.Core.Services;
+using NAudio.Wave;
 
 namespace JRETS.Go.App;
 
@@ -19,6 +23,13 @@ namespace JRETS.Go.App;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private const double NextAnnouncementDepartureDistanceMeters = 200;
+    private const double ApproachAnnouncementRemainingDistanceMeters = 400;
+    private const double AnnouncementTargetRms = 0.12;
+    private const double AnnouncementMinGain = 0.8;
+    private const double AnnouncementMaxGain = 6.0;
+    private const double AnnouncementLimiterThreshold = 0.98;
+    private const double AnnouncementSoftClipDrive = 1.8;
     private const int TimelineVisibleStationCount = 8;
     private const int TimelineVisibleTokenCount = TimelineVisibleStationCount * 2 - 1;
     private const double StationArrowWidth = 128;
@@ -45,6 +56,8 @@ public partial class MainWindow : Window
     private readonly DriveReportReader _driveReportReader;
     private readonly DispatcherTimer _refreshTimer;
     private readonly ObservableCollection<UpcomingStationItem> _upcomingStations = [];
+    private readonly MediaPlayer _announcementPlayer = new();
+    private readonly ConcurrentDictionary<string, string> _announcementNormalizedPathCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<LineConfigurationOption> _lineConfigOptions = [];
     private readonly List<TrainServiceOption> _serviceOptions = [];
     private readonly HashSet<int> _registeredHotKeys = [];
@@ -57,9 +70,16 @@ public partial class MainWindow : Window
     private bool _suppressComboChange;
     private bool _timelineInitialized;
     private bool _timelineLastDoorOpen;
+    private bool _announcementDoorStateInitialized;
+    private bool _announcementPreviousDoorOpen;
     private int _timelineActiveToken;
     private int _timelineWindowStart;
+    private int? _announcementTargetStationId;
+    private int? _lastNextAnnouncementStationId;
+    private int? _lastApproachAnnouncementStationId;
     private string _lastDataSourceError = string.Empty;
+    private double? _announcementDepartureStartDistanceMeters;
+    private double _announcementPreviousDistanceMeters;
     private bool _previousDoorOpen;
     private double? _activeApproachTargetStopDistance;
     private int? _activeApproachScheduledSeconds;
@@ -68,6 +88,7 @@ public partial class MainWindow : Window
     private int? _lastScoredStationId;
     private TrainServiceOption? _selectedService;
     private ScoringConfiguration _scoringConfiguration = new();
+    private readonly string _announcementTempDirectory = Path.Combine(Path.GetTempPath(), "JRETS.Go.App", "normalized-audio");
 
     public MainWindow()
     {
@@ -229,6 +250,8 @@ public partial class MainWindow : Window
 
         _configReloadDebounceTimer.Stop();
         _configWatcher.Dispose();
+        _announcementPlayer.Close();
+        TryCleanupAnnouncementTempDirectory();
         _memoryDataSource?.Dispose();
     }
 
@@ -318,7 +341,9 @@ public partial class MainWindow : Window
             _debugDataSource.StartSession();
         }
 
-        _previousDoorOpen = GetCurrentSnapshot().DoorOpen;
+        var currentSnapshot = GetCurrentSnapshot();
+        _previousDoorOpen = currentSnapshot.DoorOpen;
+        ResetAnnouncementState(currentSnapshot.DoorOpen);
 
         UpdateDisplay();
     }
@@ -333,6 +358,7 @@ public partial class MainWindow : Window
         _sessionRunning = false;
         _usingLiveMemory = false;
         _timelineInitialized = false;
+        ResetAnnouncementState(doorOpen: true);
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
         UpdateDisplay();
@@ -428,6 +454,7 @@ public partial class MainWindow : Window
         LineNumberBadgeTextBlock.Text = displayStation is null ? "--" : displayStation.Number.ToString("00");
 
         RefreshUpcomingStations(snapshot, state);
+        HandleAutoAnnouncements(snapshot, state);
 
         ErrorTextBlock.Text = string.IsNullOrWhiteSpace(_lastDataSourceError)
             ? string.Empty
@@ -889,6 +916,304 @@ public partial class MainWindow : Window
             .Max();
 
         return Math.Clamp(previousIndex, 0, stopStations.Count - 1);
+    }
+
+    private void ResetAnnouncementState(bool doorOpen)
+    {
+        _announcementDoorStateInitialized = true;
+        _announcementPreviousDoorOpen = doorOpen;
+        _announcementTargetStationId = null;
+        _announcementDepartureStartDistanceMeters = null;
+        _announcementPreviousDistanceMeters = 0;
+        _lastNextAnnouncementStationId = null;
+        _lastApproachAnnouncementStationId = null;
+        _announcementPlayer.Stop();
+    }
+
+    private void HandleAutoAnnouncements(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        if (!_sessionRunning || _selectedService is null)
+        {
+            _announcementDoorStateInitialized = false;
+            return;
+        }
+
+        if (!_announcementDoorStateInitialized)
+        {
+            _announcementPreviousDoorOpen = snapshot.DoorOpen;
+            _announcementPreviousDistanceMeters = snapshot.CurrentDistanceMeters;
+            _announcementDoorStateInitialized = true;
+        }
+
+        var doorCloseTransition = _announcementPreviousDoorOpen && !snapshot.DoorOpen;
+        var doorOpenTransition = !_announcementPreviousDoorOpen && snapshot.DoorOpen;
+
+        if (doorCloseTransition)
+        {
+            _announcementTargetStationId = state.NextStation?.Id;
+            _announcementDepartureStartDistanceMeters = _announcementPreviousDistanceMeters;
+        }
+
+        if (doorOpenTransition)
+        {
+            _announcementTargetStationId = null;
+            _announcementDepartureStartDistanceMeters = null;
+        }
+
+        if (!snapshot.DoorOpen && _announcementTargetStationId is null && state.NextStation is not null)
+        {
+            _announcementTargetStationId = state.NextStation.Id;
+            _announcementDepartureStartDistanceMeters = _announcementPreviousDistanceMeters;
+        }
+
+        if (!snapshot.DoorOpen && _announcementTargetStationId is int stationId)
+        {
+            var departureStartDistance = _announcementDepartureStartDistanceMeters ?? snapshot.CurrentDistanceMeters;
+            var traveledDistance = Math.Abs(snapshot.CurrentDistanceMeters - departureStartDistance);
+            if (traveledDistance >= NextAnnouncementDepartureDistanceMeters && _lastNextAnnouncementStationId != stationId)
+            {
+                if (TryPlayStationAnnouncement(stationId, paIndex: 0))
+                {
+                    _lastNextAnnouncementStationId = stationId;
+                }
+            }
+
+            var remainingDistance = snapshot.TargetStopDistanceMeters - snapshot.CurrentDistanceMeters;
+            if (remainingDistance < ApproachAnnouncementRemainingDistanceMeters && _lastApproachAnnouncementStationId != stationId)
+            {
+                var played = TryPlayStationAnnouncement(stationId, paIndex: 1);
+                if (played)
+                {
+                    _lastApproachAnnouncementStationId = stationId;
+                }
+                else if (!HasStationAnnouncement(stationId, paIndex: 1))
+                {
+                    _lastApproachAnnouncementStationId = stationId;
+                }
+            }
+        }
+
+        _announcementPreviousDoorOpen = snapshot.DoorOpen;
+        _announcementPreviousDistanceMeters = snapshot.CurrentDistanceMeters;
+    }
+
+    private bool HasStationAnnouncement(int stationId, int paIndex)
+    {
+        if (_selectedService is null)
+        {
+            return false;
+        }
+
+        var station = _lineConfiguration.Stations.FirstOrDefault(x => x.Id == stationId);
+        if (station is null)
+        {
+            return false;
+        }
+
+        var paList = ResolvePaListForService(station, _selectedService.Train.Id);
+        return paList is not null && paList.Count > paIndex && !string.IsNullOrWhiteSpace(paList[paIndex]);
+    }
+
+    private bool TryPlayStationAnnouncement(int stationId, int paIndex)
+    {
+        if (_selectedService is null)
+        {
+            return false;
+        }
+
+        var station = _lineConfiguration.Stations.FirstOrDefault(x => x.Id == stationId);
+        if (station is null)
+        {
+            return false;
+        }
+
+        var trainId = _selectedService.Train.Id;
+        var paList = ResolvePaListForService(station, trainId);
+        if (paList is null || paList.Count <= paIndex)
+        {
+            return false;
+        }
+
+        var fileName = paList[paIndex];
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return false;
+        }
+
+        var lineId = string.IsNullOrWhiteSpace(_lineConfiguration.LineInfo.Id)
+            ? Path.GetFileNameWithoutExtension(_lineConfigPath)
+            : _lineConfiguration.LineInfo.Id;
+
+        var audioPath = Path.Combine(AppContext.BaseDirectory, "audio", lineId, trainId, fileName);
+        if (!File.Exists(audioPath))
+        {
+            _lastDataSourceError = $"Announcement file not found: {audioPath}";
+            return false;
+        }
+
+        try
+        {
+            var playbackPath = PrepareNormalizedAnnouncementAudio(audioPath);
+            _announcementPlayer.Stop();
+            _announcementPlayer.Open(new Uri(playbackPath, UriKind.Absolute));
+            _announcementPlayer.Volume = 1.0;
+            _announcementPlayer.Position = TimeSpan.Zero;
+            _announcementPlayer.Play();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _lastDataSourceError = $"Announcement playback failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static IReadOnlyList<string>? ResolvePaListForService(StationInfo station, string trainId)
+    {
+        if (station.Pa.TryGetValue(trainId, out var directMatch))
+        {
+            return directMatch;
+        }
+
+        var caseInsensitiveMatch = station.Pa
+            .FirstOrDefault(x => string.Equals(x.Key, trainId, StringComparison.OrdinalIgnoreCase));
+        return caseInsensitiveMatch.Value;
+    }
+
+    private string PrepareNormalizedAnnouncementAudio(string sourcePath)
+    {
+        Directory.CreateDirectory(_announcementTempDirectory);
+
+        var versionKey = $"{sourcePath}|{File.GetLastWriteTimeUtc(sourcePath).Ticks}";
+        if (_announcementNormalizedPathCache.TryGetValue(versionKey, out var cachedPath) && File.Exists(cachedPath))
+        {
+            return cachedPath;
+        }
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(versionKey)));
+        var outputPath = Path.Combine(_announcementTempDirectory, $"{hash}.wav");
+
+        if (!File.Exists(outputPath))
+        {
+            NormalizeAnnouncementToWav(sourcePath, outputPath);
+        }
+
+        _announcementNormalizedPathCache[versionKey] = outputPath;
+        return outputPath;
+    }
+
+    private static void NormalizeAnnouncementToWav(string sourcePath, string outputPath)
+    {
+        using var reader = new AudioFileReader(sourcePath);
+        var samples = new List<float>(reader.WaveFormat.SampleRate * Math.Max(1, reader.WaveFormat.Channels) * 6);
+        var buffer = new float[reader.WaveFormat.SampleRate * Math.Max(1, reader.WaveFormat.Channels)];
+
+        double sumSquares = 0;
+        var sampleCount = 0;
+        var peak = 0.0;
+
+        while (true)
+        {
+            var read = reader.Read(buffer, 0, buffer.Length);
+            if (read <= 0)
+            {
+                break;
+            }
+
+            for (var i = 0; i < read; i++)
+            {
+                var sample = buffer[i];
+                samples.Add(sample);
+                sumSquares += sample * sample;
+                sampleCount++;
+                var abs = Math.Abs(sample);
+                if (abs > peak)
+                {
+                    peak = abs;
+                }
+            }
+        }
+
+        if (sampleCount == 0)
+        {
+            throw new InvalidOperationException("Audio file has no readable samples.");
+        }
+
+        var rms = Math.Sqrt(sumSquares / sampleCount);
+        var gain = AnnouncementTargetRms / Math.Max(rms, 0.0001);
+        gain = Math.Clamp(gain, AnnouncementMinGain, AnnouncementMaxGain);
+
+        if (peak > 0.0001)
+        {
+            gain = Math.Min(gain, AnnouncementLimiterThreshold / peak);
+        }
+
+        var softClipNormalizer = Math.Tanh(AnnouncementSoftClipDrive);
+        var processedPeak = 0.0;
+
+        for (var i = 0; i < samples.Count; i++)
+        {
+            var boosted = samples[i] * gain;
+            var clipped = Math.Tanh(boosted * AnnouncementSoftClipDrive) / softClipNormalizer;
+            var clamped = Math.Clamp(clipped, -1.0, 1.0);
+            var abs = Math.Abs(clamped);
+            if (abs > processedPeak)
+            {
+                processedPeak = abs;
+            }
+
+            samples[i] = (float)clamped;
+        }
+
+        var finalScale = processedPeak <= 0.0001
+            ? 1.0
+            : Math.Min(1.0, AnnouncementLimiterThreshold / processedPeak);
+
+        var outFormat = new WaveFormat(reader.WaveFormat.SampleRate, 16, reader.WaveFormat.Channels);
+        using var writer = new WaveFileWriter(outputPath, outFormat);
+        var byteBuffer = new byte[samples.Count * sizeof(short)];
+
+        for (var i = 0; i < samples.Count; i++)
+        {
+            var scaled = samples[i] * (float)finalScale;
+            var sample16 = (short)Math.Round(Math.Clamp(scaled, -1f, 1f) * short.MaxValue);
+            byteBuffer[i * 2] = (byte)(sample16 & 0xFF);
+            byteBuffer[i * 2 + 1] = (byte)((sample16 >> 8) & 0xFF);
+        }
+
+        writer.Write(byteBuffer, 0, byteBuffer.Length);
+    }
+
+    private void TryCleanupAnnouncementTempDirectory()
+    {
+        try
+        {
+            if (!Directory.Exists(_announcementTempDirectory))
+            {
+                return;
+            }
+
+            var cutoff = DateTime.UtcNow.AddHours(-12);
+            foreach (var file in Directory.EnumerateFiles(_announcementTempDirectory, "*.wav"))
+            {
+                try
+                {
+                    var lastWrite = File.GetLastWriteTimeUtc(file);
+                    if (lastWrite < cutoff)
+                    {
+                        File.Delete(file);
+                    }
+                }
+                catch
+                {
+                    // Ignore cleanup failures; runtime playback should not be blocked.
+                }
+            }
+        }
+        catch
+        {
+            // Ignore cleanup failures; runtime playback should not be blocked.
+        }
     }
 
     private Brush GetFutureBrush()

@@ -5,6 +5,7 @@ namespace JRETS.Go.Core.Services;
 
 public sealed class DebugRealtimeDataSource : IRealtimeDataSource
 {
+    private const double DebugDepartureStepMeters = 220;
     private enum DebugPhase
     {
         /// <summary>停靠站，开门: ただいま</summary>
@@ -75,6 +76,7 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
                 // ただいま → 次は (close door and depart)
                 _currentPhase = DebugPhase.Departed;
                 _doorOpen = false;
+                _currentDistance += DebugDepartureStepMeters;
                 break;
 
             case DebugPhase.Departed:

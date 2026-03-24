@@ -5,8 +5,6 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="JRETS-Go"
-        Width="1280"
-        Height="720"
         WindowStartupLocation="Manual"
         WindowStyle="None"
         ResizeMode="NoResize"
@@ -14,7 +12,9 @@
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="True">
-    <Grid Margin="8,4,420,24">
+    <Viewbox Stretch="Uniform" StretchDirection="Both">
+        <Grid Width="2560" Height="1440">
+            <Grid Margin="0,0,0,48">
         <Grid.RowDefinitions>
             <RowDefinition Height="120" />
             <RowDefinition Height="*" />
@@ -25,13 +25,14 @@
         <Border Grid.Row="0"
             Height="120"
             Background="#E6162230"
-            CornerRadius="4"
+            CornerRadius="0,0,4,0"
             Padding="0"
+            Margin="400,0,400,0"
             ClipToBounds="True">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="600" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="500" />
+                    <ColumnDefinition Width="1200" />
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Padding="0">
@@ -42,7 +43,7 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel Orientation="Horizontal" Grid.Row="0" VerticalAlignment="Top">
-                            <Border x:Name="ServiceTypeTagBorder" Background="{Binding Background, ElementName=LineColorPreview}" CornerRadius="4,0,4,0" Padding="12,4">
+                            <Border x:Name="ServiceTypeTagBorder" Background="{Binding Background, ElementName=LineColorPreview}" CornerRadius="0,0,4,0" Padding="12,4">
                                 <TextBlock x:Name="ServiceTypeTextBlock" Width="96" Foreground="White" TextAlignment="Center" FontSize="16" FontWeight="Bold" Text="各駅停車" />
                             </Border>
                             <TextBlock x:Name="DirectionTextBlock" Foreground="White" FontSize="24" FontWeight="Bold" Margin="18,-2,0,0" />
@@ -107,6 +108,7 @@
                                        FontSize="32"
                                        FontWeight="Bold"
                                        VerticalAlignment="Bottom"
+                                       TextWrapping="Wrap"
                                        Margin="0,0,0,10" />
                         </Grid>
                     </Grid>
@@ -167,29 +169,29 @@
         <Border Grid.Row="1"
                 x:Name="DebugPanel"
                 Width="320"
-                VerticalAlignment="Top"
+                VerticalAlignment="Bottom"
                 HorizontalAlignment="Left"
-                Margin="0,16,0,0"
+                Margin="0,0,0,0"
                 Background="#E6162230"
-                CornerRadius="10"
+                CornerRadius="0,10,10,0"
                 Padding="14">
             <StackPanel>
                 <TextBlock Text="Control Panel" Foreground="#EAF4FF" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock Text="Line Config" Foreground="#C5D4E4" FontSize="11" Margin="0,0,0,3" />
-                <ComboBox x:Name="LineConfigComboBox" Height="30" Margin="0,0,0,8" SelectionChanged="LineConfigSelectionChanged" />
+                <TextBlock Text="Line Config" Foreground="#C5D4E4" FontSize="12" Margin="0,0,0,3" />
+                <ComboBox x:Name="LineConfigComboBox" Height="20" Margin="0,0,0,8" SelectionChanged="LineConfigSelectionChanged" />
 
-                <TextBlock Text="Train Service" Foreground="#C5D4E4" FontSize="11" Margin="0,0,0,3" />
-                <ComboBox x:Name="ServiceTypeComboBox" Height="30" Margin="0,0,0,8" SelectionChanged="ServiceTypeSelectionChanged" />
+                <TextBlock Text="Train Pattern" Foreground="#C5D4E4" FontSize="12" Margin="0,0,0,3" />
+                <ComboBox x:Name="ServiceTypeComboBox" Height="20" Margin="0,0,0,8" SelectionChanged="ServiceTypeSelectionChanged" />
 
-                <TextBlock x:Name="ErrorTextBlock" Foreground="#F7BF9A" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <TextBlock x:Name="ErrorTextBlock" Foreground="#F7BF9A" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8" />
 
                 <WrapPanel Margin="0,0,0,8">
-                    <Button Content="Start (F9)" Click="StartSessionClick" Width="142" Height="32" Margin="0,0,8,8" />
-                    <Button Content="End (F10)" Click="EndSessionClick" Width="142" Height="32" Margin="0,0,0,8" />
+                    <Button Content="Start (F9)" Click="StartSessionClick" Width="142" Height="32" Margin="0,0,8,0" />
+                    <Button Content="End (F10)" Click="EndSessionClick" Width="142" Height="32" Margin="0,0,0,0" />
                 </WrapPanel>
 
-                <Button Content="Open Latest Report" Click="OpenLatestReportClick" Height="34" Margin="0,0,0,8" />
-                <Button Content="Toggle Click Through (F7)" Click="ToggleClickThroughClick" Height="34" />
+                <Button Content="Toggle Click Through (F7)" Click="ToggleClickThroughClick" Height="34" Margin="0,0,0,8" />
+                <Button Content="Open Latest Report" Click="OpenLatestReportClick" Height="34" />
                 <Button x:Name="ToggleDebugModeButton" Content="Enable Debug Mode" Click="ToggleDebugModeClick" Height="34" Margin="0,8,0,0" />
                 <Button Content="Exit App" Click="ExitAppClick" Height="34" Margin="0,8,0,0" />
 
@@ -215,6 +217,8 @@
                 </Border>
             </StackPanel>
         </Border>
-    </Grid>
+            </Grid>
+        </Grid>
+    </Viewbox>
 </Window>
 
