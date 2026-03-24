@@ -48,7 +48,9 @@
             </DataGrid.ColumnHeaderStyle>
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Station" Binding="{Binding StationLabel}" Width="110" />
-                <DataGridTextColumn Header="Time" Binding="{Binding CapturedAtText}" Width="170" />
+                <DataGridTextColumn Header="Captured" Binding="{Binding CapturedAtText}" Width="120" />
+                <DataGridTextColumn Header="Scheduled" Binding="{Binding ScheduledArrivalText}" Width="110" />
+                <DataGridTextColumn Header="Actual" Binding="{Binding ActualArrivalText}" Width="110" />
                 <DataGridTextColumn Header="PosErr(m)" Binding="{Binding PositionErrorMeters}" Width="90" />
                 <DataGridTextColumn Header="TimeErr(s)" Binding="{Binding TimeErrorSeconds}" Width="90" />
                 <DataGridTextColumn Header="PosScore" Binding="{Binding PositionScore}" Width="80" />

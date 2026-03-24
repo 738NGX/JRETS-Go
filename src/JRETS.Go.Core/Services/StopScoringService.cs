@@ -22,7 +22,8 @@ public sealed class StopScoringService
         var positionErrorSigned = snapshot.CurrentDistanceMeters - snapshot.TargetStopDistanceMeters;
         var positionError = Math.Abs(positionErrorSigned);
         var scheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
-        var timeError = Math.Abs(snapshot.MainClockSeconds - scheduledSeconds);
+        var timeErrorSigned = snapshot.MainClockSeconds - scheduledSeconds;
+        var timeError = Math.Abs(timeErrorSigned);
 
         var positionScore = Math.Max(0, _configuration.MaxScorePerStop - positionError * _configuration.PositionPenaltyPerMeter);
         var timeScore = Math.Max(0, _configuration.MaxScorePerStop - timeError * _configuration.TimePenaltyPerSecond);
@@ -33,8 +34,10 @@ public sealed class StopScoringService
             StationId = station.Id,
             StationName = station.NameJp,
             CapturedAt = snapshot.CapturedAt,
+            ScheduledArrivalSeconds = scheduledSeconds,
+            ActualArrivalSeconds = snapshot.MainClockSeconds,
             PositionErrorMeters = Math.Round(positionErrorSigned, 2),
-            TimeErrorSeconds = timeError,
+            TimeErrorSeconds = timeErrorSigned,
             PositionScore = Math.Round(positionScore, 1),
             TimeScore = Math.Round(timeScore, 1),
             FinalScore = finalScore

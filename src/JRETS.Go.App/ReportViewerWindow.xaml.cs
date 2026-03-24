@@ -17,8 +17,10 @@ public partial class ReportViewerWindow
         {
             StationLabel = x.StationName,
             CapturedAtText = x.CapturedAt.ToString("HH:mm:ss"),
+            ScheduledArrivalText = FormatClock(x.ScheduledArrivalSeconds),
+            ActualArrivalText = FormatClock(x.ActualArrivalSeconds),
             PositionErrorMeters = x.PositionErrorMeters.ToString("F2"),
-            TimeErrorSeconds = x.TimeErrorSeconds.ToString(),
+            TimeErrorSeconds = x.TimeErrorSeconds.ToString("+0;-0;0"),
             PositionScore = x.PositionScore.ToString("F1"),
             TimeScore = x.TimeScore.ToString("F1"),
             FinalScore = x.FinalScore.ToString("F1"),
@@ -32,6 +34,10 @@ public partial class ReportViewerWindow
 
         public required string CapturedAtText { get; init; }
 
+        public required string ScheduledArrivalText { get; init; }
+
+        public required string ActualArrivalText { get; init; }
+
         public required string PositionErrorMeters { get; init; }
 
         public required string TimeErrorSeconds { get; init; }
@@ -43,5 +49,14 @@ public partial class ReportViewerWindow
         public required string FinalScore { get; init; }
 
         public required double FinalScoreBarWidth { get; init; }
+    }
+
+    private static string FormatClock(int totalSeconds)
+    {
+        var normalized = ((totalSeconds % 86400) + 86400) % 86400;
+        var hours = normalized / 3600;
+        var minutes = (normalized % 3600) / 60;
+        var seconds = normalized % 60;
+        return $"{hours:D2}:{minutes:D2}:{seconds:D2}";
     }
 }

@@ -38,9 +38,12 @@ public partial class MainWindow : Window
     private const double ArrowHeight = 32;
     private const double ArrowNotchDepth = 16;
     private const double ArrowTipWidth = 12;
+    private const double OvershootFaultMeters = 5.0;
     private const int HotKeyStartSession = 1001;
     private const int HotKeyEndSession = 1002;
     private const int HotKeyToggleClickThrough = 1003;
+    private const int HotKeyMelodyTogglePlayback = 1004;
+    private const int HotKeyMelodyCycleSelection = 1005;
 
     private string _lineConfigPath;
     private readonly string _offsetsConfigPath;
@@ -57,6 +60,7 @@ public partial class MainWindow : Window
     private readonly DriveReportReader _driveReportReader;
     private readonly DispatcherTimer _refreshTimer;
     private readonly ObservableCollection<UpcomingStationItem> _upcomingStations = [];
+    private readonly ObservableCollection<MelodyOptionItem> _melodyOptionItems = [];
     private readonly MediaPlayer _announcementPlayer = new();
     private readonly MediaPlayer _melodyPlaybackPlayer = new();
     private readonly ConcurrentDictionary<string, string> _announcementNormalizedPathCache = new(StringComparer.OrdinalIgnoreCase);
@@ -85,6 +89,7 @@ public partial class MainWindow : Window
     private bool _previousDoorOpen;
     private double? _activeApproachTargetStopDistance;
     private int? _activeApproachScheduledSeconds;
+    private bool _activeApproachOvershootFaultTriggered;
     private DateTime _sessionStartedAt;
     private readonly List<StationStopScore> _stationScores = [];
     private int? _lastScoredStationId;
@@ -115,6 +120,7 @@ public partial class MainWindow : Window
         _driveReportExporter = new DriveReportExporter();
         _driveReportReader = new DriveReportReader();
         UpcomingStationsItemsControl.ItemsSource = _upcomingStations;
+        MelodyOptionsItemsControl.ItemsSource = _melodyOptionItems;
 
         LineConfigComboBox.DisplayMemberPath = nameof(LineConfigurationOption.DisplayName);
         ServiceTypeComboBox.DisplayMemberPath = nameof(TrainServiceOption.DisplayName);
@@ -296,6 +302,8 @@ public partial class MainWindow : Window
         RegisterHotKey(HotKeyStartSession, HotKeyModifiers.NoRepeat, 0x78); // F9
         RegisterHotKey(HotKeyEndSession, HotKeyModifiers.NoRepeat, 0x79); // F10
         RegisterHotKey(HotKeyToggleClickThrough, HotKeyModifiers.NoRepeat, 0x76); // F7
+        RegisterHotKey(HotKeyMelodyTogglePlayback, HotKeyModifiers.NoRepeat, 0x73); // F4
+        RegisterHotKey(HotKeyMelodyCycleSelection, HotKeyModifiers.Shift | HotKeyModifiers.NoRepeat, 0x09); // Shift+Tab
     }
 
     private void RegisterHotKey(int id, HotKeyModifiers modifiers, uint virtualKey)
@@ -331,6 +339,22 @@ public partial class MainWindow : Window
                 ToggleClickThrough();
                 handled = true;
                 break;
+            case HotKeyMelodyTogglePlayback:
+                if (MelodySelectionPanel.Visibility == Visibility.Visible)
+                {
+                    ToggleMelodyPlayback();
+                }
+
+                handled = true;
+                break;
+            case HotKeyMelodyCycleSelection:
+                if (MelodySelectionPanel.Visibility == Visibility.Visible)
+                {
+                    CycleMelodySelection(reverse: true);
+                }
+
+                handled = true;
+                break;
         }
 
         return nint.Zero;
@@ -338,35 +362,12 @@ public partial class MainWindow : Window
 
     private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        HandleMelodyHotKeys(e);
+        // Melody hotkeys are handled by global RegisterHotKey (WM_HOTKEY).
     }
 
     private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        HandleMelodyHotKeys(e);
-    }
-
-    private void HandleMelodyHotKeys(System.Windows.Input.KeyEventArgs e)
-    {
-        if (MelodySelectionPanel.Visibility != Visibility.Visible)
-        {
-            return;
-        }
-
-        if (e.Key == System.Windows.Input.Key.F4)
-        {
-            ToggleMelodyPlayback();
-            e.Handled = true;
-        }
-        else if (e.Key == System.Windows.Input.Key.Tab)
-        {
-            var isShiftPressed = (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == System.Windows.Input.ModifierKeys.Shift;
-            if (isShiftPressed)
-            {
-                CycleMelodySelection(reverse: true);
-                e.Handled = true;
-            }
-        }
+        // Melody hotkeys are handled by global RegisterHotKey (WM_HOTKEY).
     }
 
     private void OpenMelodySelectionPanel(StationInfo? station)
@@ -508,12 +509,42 @@ public partial class MainWindow : Window
         if (_melodyCurrentOptions.Count == 0)
         {
             MelodyCurrentText.Text = "No melody";
+            _melodyOptionItems.Clear();
             return;
         }
 
-        var current = _melodyCurrentOptions[_melodySelectedIndex];
+        var selectedIndex = Math.Clamp(_melodySelectedIndex, 0, _melodyCurrentOptions.Count - 1);
+        var current = _melodyCurrentOptions[selectedIndex];
         var status = _melodyIsPlaying ? "▶ Playing" : "◻ Stopped";
-        MelodyCurrentText.Text = $"{status}: {current}";
+        MelodyCurrentText.Text = $"{status}  ({selectedIndex + 1}/{_melodyCurrentOptions.Count})";
+
+        _melodyOptionItems.Clear();
+        for (var i = 0; i < _melodyCurrentOptions.Count; i++)
+        {
+            var isSelected = i == selectedIndex;
+            _melodyOptionItems.Add(new MelodyOptionItem
+            {
+                Label = $"{i + 1:D2}. {_melodyCurrentOptions[i]}",
+                Background = isSelected
+                    ? new SolidColorBrush(Color.FromRgb(41, 100, 151))
+                    : new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
+                Foreground = isSelected
+                    ? new SolidColorBrush(Color.FromRgb(234, 244, 255))
+                    : new SolidColorBrush(Color.FromRgb(167, 189, 212)),
+                FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal
+            });
+        }
+    }
+
+    private sealed class MelodyOptionItem
+    {
+        public required string Label { get; init; }
+
+        public required Brush Background { get; init; }
+
+        public required Brush Foreground { get; init; }
+
+        public required FontWeight FontWeight { get; init; }
     }
 
     private void StartSession()
@@ -525,6 +556,7 @@ public partial class MainWindow : Window
         _lastScoredStationId = null;
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
+        _activeApproachOvershootFaultTriggered = false;
         _usingLiveMemory = TryActivateLiveMemoryMode();
         if (!_usingLiveMemory)
         {
@@ -551,6 +583,7 @@ public partial class MainWindow : Window
         ResetAnnouncementState(doorOpen: true);
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
+        _activeApproachOvershootFaultTriggered = false;
         CloseMelodySelectionPanel();
         UpdateDisplay();
     }
@@ -684,6 +717,7 @@ public partial class MainWindow : Window
             // Latch next-stop targets at departure start and keep them until next stop scoring.
             _activeApproachTargetStopDistance = snapshot.TargetStopDistanceMeters;
             _activeApproachScheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
+            _activeApproachOvershootFaultTriggered = false;
         }
 
         if (!snapshot.DoorOpen && (_activeApproachTargetStopDistance is null || _activeApproachScheduledSeconds is null))
@@ -691,6 +725,16 @@ public partial class MainWindow : Window
             // Fallback when session starts while already running between stations.
             _activeApproachTargetStopDistance = snapshot.TargetStopDistanceMeters;
             _activeApproachScheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
+            _activeApproachOvershootFaultTriggered = false;
+        }
+
+        if (!snapshot.DoorOpen && _activeApproachTargetStopDistance is not null)
+        {
+            var approachPositionErrorSigned = snapshot.CurrentDistanceMeters - _activeApproachTargetStopDistance.Value;
+            if (approachPositionErrorSigned >= OvershootFaultMeters)
+            {
+                _activeApproachOvershootFaultTriggered = true;
+            }
         }
 
         _previousDoorOpen = snapshot.DoorOpen;
@@ -711,6 +755,7 @@ public partial class MainWindow : Window
         _lastScoredStationId = state.CurrentStopStation.Id;
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
+        _activeApproachOvershootFaultTriggered = false;
     }
 
     private RealtimeSnapshot BuildScoringSnapshot(RealtimeSnapshot currentSnapshot)
@@ -724,6 +769,14 @@ public partial class MainWindow : Window
         var scheduledHour = scheduledSeconds / 3600;
         var scheduledMinute = (scheduledSeconds % 3600) / 60;
         var scheduledSecond = scheduledSeconds % 60;
+        var targetStopDistance = _activeApproachTargetStopDistance.Value;
+
+        var adjustedCurrentDistance = currentSnapshot.CurrentDistanceMeters;
+        var currentPositionErrorSigned = adjustedCurrentDistance - targetStopDistance;
+        if (_activeApproachOvershootFaultTriggered && currentPositionErrorSigned < OvershootFaultMeters)
+        {
+            adjustedCurrentDistance = targetStopDistance + OvershootFaultMeters;
+        }
 
         return new RealtimeSnapshot
         {
@@ -734,8 +787,8 @@ public partial class MainWindow : Window
             TimetableHour = scheduledHour,
             TimetableMinute = scheduledMinute,
             TimetableSecond = scheduledSecond,
-            CurrentDistanceMeters = currentSnapshot.CurrentDistanceMeters,
-            TargetStopDistanceMeters = _activeApproachTargetStopDistance.Value
+            CurrentDistanceMeters = adjustedCurrentDistance,
+            TargetStopDistanceMeters = targetStopDistance
         };
     }
 
@@ -1141,7 +1194,7 @@ public partial class MainWindow : Window
 
         if (doorCloseTransition)
         {
-            _announcementTargetStationId = state.NextStation?.Id;
+            _announcementTargetStationId = ResolveAnnouncementTargetStationId(state);
             _announcementDepartureStartDistanceMeters = _announcementPreviousDistanceMeters;
             CloseMelodySelectionPanel();
         }
@@ -1167,9 +1220,19 @@ public partial class MainWindow : Window
             CloseMelodySelectionPanel();
         }
 
-        if (!snapshot.DoorOpen && _announcementTargetStationId is null && state.NextStation is not null)
+        if (!snapshot.DoorOpen && _announcementTargetStationId is int staleTargetStationId)
         {
-            _announcementTargetStationId = state.NextStation.Id;
+            var targetStation = _lineConfiguration.Stations.FirstOrDefault(x => x.Id == staleTargetStationId);
+            if (targetStation is null || !IsStopForSelectedService(targetStation))
+            {
+                _announcementTargetStationId = ResolveAnnouncementTargetStationId(state);
+                _announcementDepartureStartDistanceMeters = _announcementPreviousDistanceMeters;
+            }
+        }
+
+        if (!snapshot.DoorOpen && _announcementTargetStationId is null)
+        {
+            _announcementTargetStationId = ResolveAnnouncementTargetStationId(state);
             _announcementDepartureStartDistanceMeters = _announcementPreviousDistanceMeters;
         }
 
@@ -1202,6 +1265,31 @@ public partial class MainWindow : Window
 
         _announcementPreviousDoorOpen = snapshot.DoorOpen;
         _announcementPreviousDistanceMeters = snapshot.CurrentDistanceMeters;
+    }
+
+    private int? ResolveAnnouncementTargetStationId(TrainDisplayState state)
+    {
+        var orderedStations = _lineConfiguration.Stations.OrderBy(x => x.Id).ToList();
+        if (orderedStations.Count == 0)
+        {
+            return null;
+        }
+
+        var anchorStationId = state.CurrentStopStation is not null
+            ? state.CurrentStopStation.Id + 1
+            : state.NextStation?.Id;
+
+        if (anchorStationId is null)
+        {
+            return null;
+        }
+
+        // For rapid/express services, state.NextStation can point to a pass-through station.
+        // Always target the next actual stopping station for the selected service.
+        var nextStop = orderedStations
+            .FirstOrDefault(x => x.Id >= anchorStationId.Value && IsStopForSelectedService(x));
+
+        return nextStop?.Id;
     }
 
     private bool HasStationAnnouncement(int stationId, int paIndex)

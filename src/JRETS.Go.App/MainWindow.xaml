@@ -179,8 +179,22 @@
                 Padding="14"
                 Visibility="Collapsed">
             <StackPanel>
-                <TextBlock Text="Melody" Foreground="#EAF4FF" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="発車メロディー" Foreground="#EAF4FF" FontSize="16" FontWeight="SemiBold" />
                 <TextBlock x:Name="MelodyCurrentText" Foreground="#C5D4E4" FontSize="12" Margin="0,4,0,8" TextWrapping="Wrap" Text="No melody" />
+                <Border Background="#12283B" CornerRadius="6" Padding="6" Margin="0,0,0,8">
+                    <ItemsControl x:Name="MelodyOptionsItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding Background}" CornerRadius="4" Padding="6,4" Margin="0,2,0,2">
+                                    <TextBlock Text="{Binding Label}"
+                                               Foreground="{Binding Foreground}"
+                                               FontWeight="{Binding FontWeight}"
+                                               TextWrapping="Wrap" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
                 <TextBlock Foreground="#A7BDD4" FontSize="11" Margin="0,0,0,8">
                     <Run Text="Shift+Tab: Change  |  F4: Play/Stop" />
                 </TextBlock>

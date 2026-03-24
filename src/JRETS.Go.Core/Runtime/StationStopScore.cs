@@ -8,6 +8,10 @@ public sealed class StationStopScore
 
     public required DateTime CapturedAt { get; init; }
 
+    public required int ScheduledArrivalSeconds { get; init; }
+
+    public required int ActualArrivalSeconds { get; init; }
+
     public required double PositionErrorMeters { get; init; }
 
     public required int TimeErrorSeconds { get; init; }

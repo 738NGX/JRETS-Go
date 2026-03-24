@@ -170,6 +170,8 @@ offsets:
                         StationId = 1,
                         StationName = "A",
                         CapturedAt = DateTime.Now,
+                        ScheduledArrivalSeconds = 28800,
+                        ActualArrivalSeconds = 28803,
                         PositionErrorMeters = 0.2,
                         TimeErrorSeconds = 3,
                         PositionScore = 99.6,
@@ -270,6 +272,37 @@ scoring:
     }
 
     [Fact]
+    public void ScoreStop_WhenEarlyArrival_TimeErrorIsNegative()
+    {
+        var station = new StationInfo
+        {
+            Id = 1,
+            Number = 1,
+            NameJp = "A",
+            NameEn = "A"
+        };
+
+        var snapshot = new RealtimeSnapshot
+        {
+            CapturedAt = DateTime.Now,
+            NextStationId = 2,
+            DoorOpen = true,
+            MainClockSeconds = 990,
+            TimetableHour = 0,
+            TimetableMinute = 16,
+            TimetableSecond = 40,
+            CurrentDistanceMeters = 100,
+            TargetStopDistanceMeters = 100
+        };
+
+        var service = new StopScoringService();
+        var result = service.ScoreStop(station, snapshot);
+
+        Assert.Equal(-10, result.TimeErrorSeconds);
+        Assert.True(result.TimeScore < 100);
+    }
+
+    [Fact]
     public void ReportReader_LoadAndFindLatest_Works()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"jrets-go-tests-{Guid.NewGuid():N}");
@@ -289,6 +322,8 @@ scoring:
                         StationId = 1,
                         StationName = "A",
                         CapturedAt = DateTime.Now,
+                        ScheduledArrivalSeconds = 28800,
+                        ActualArrivalSeconds = 28802,
                         PositionErrorMeters = 1,
                         TimeErrorSeconds = 2,
                         PositionScore = 98,
