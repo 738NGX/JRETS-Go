@@ -70,7 +70,7 @@ stations:
     code: KND
     pa:
       876G: ["8.mp3"]
-    melody: ["JRE-IKST-010-01.mp3", "モンダミン Ver.B.mp3"]
+    melody: ["モンダミン Ver.B.mp3", "せせらぎ.mp3"]
   - id: 30222
     number: 3
     name_jp: 秋葉原

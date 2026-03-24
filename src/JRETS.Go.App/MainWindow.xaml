@@ -48,7 +48,7 @@
                             <Border x:Name="ServiceTypeTagBorder" Background="{Binding Background, ElementName=LineColorPreview}" CornerRadius="0,0,4,0" Padding="12,4">
                                 <TextBlock x:Name="ServiceTypeTextBlock" Width="96" Foreground="White" TextAlignment="Center" FontSize="16" FontWeight="Bold" Text="各駅停車" />
                             </Border>
-                            <TextBlock x:Name="DirectionTextBlock" Foreground="White" FontSize="24" FontWeight="Bold" Margin="18,-2,0,0" />
+                            <TextBlock x:Name="DirectionTextBlock" Foreground="White" FontSize="24" FontWeight="Bold" Margin="18,0,0,0" />
                         </StackPanel>
 
                         <Grid Grid.Row="1" Margin="0,8,0,0">
@@ -179,7 +179,7 @@
                 Padding="14"
                 Visibility="Collapsed">
             <StackPanel>
-                <TextBlock Text="発車メロディー" Foreground="#EAF4FF" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="Station Melody" Foreground="#EAF4FF" FontSize="16" FontWeight="SemiBold" />
                 <TextBlock x:Name="MelodyCurrentText" Foreground="#C5D4E4" FontSize="12" Margin="0,4,0,8" TextWrapping="Wrap" Text="No melody" />
                 <Border Background="#12283B" CornerRadius="6" Padding="6" Margin="0,0,0,8">
                     <ItemsControl x:Name="MelodyOptionsItemsControl">

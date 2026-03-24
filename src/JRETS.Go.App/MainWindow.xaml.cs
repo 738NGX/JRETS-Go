@@ -350,7 +350,7 @@ public partial class MainWindow : Window
             case HotKeyMelodyCycleSelection:
                 if (MelodySelectionPanel.Visibility == Visibility.Visible)
                 {
-                    CycleMelodySelection(reverse: true);
+                    CycleMelodySelection(reverse: false);
                 }
 
                 handled = true;
@@ -1066,13 +1066,6 @@ public partial class MainWindow : Window
 
     private string GetLoopLineDirectionByMajorStations(TrainDisplayState state)
     {
-        // Determine current position
-        var currentStation = state.CurrentStopStation ?? state.NextStation;
-        if (currentStation is null)
-        {
-            return "--";
-        }
-
         var majorStationIds = _selectedService!.Train.MajorStationIds;
         if (majorStationIds is null || majorStationIds.Count == 0)
         {
@@ -1091,50 +1084,81 @@ public partial class MainWindow : Window
             return "--";
         }
 
-        var currentNumber = currentStation.Number;
-
-        // Find which segment (between two consecutive major stations) current position is in
-        // Use the order from yaml, not sorted by station number
-        int nextMajorIndex = 0;
-        bool foundSegment = false;
-
-        for (int i = 0; i < majorStations.Count; i++)
+        var majorIndexById = new Dictionary<int, int>();
+        for (var i = 0; i < majorStations.Count; i++)
         {
-            var station1 = majorStations[i];
-            var station2 = majorStations[(i + 1) % majorStations.Count];
+            majorIndexById[majorStations[i].Id] = i;
+        }
 
-            bool isBetween = false;
+        // Rule: if the train is exactly at a major station, do not advance yet.
+        if (state.CurrentStopStation is not null && majorIndexById.TryGetValue(state.CurrentStopStation.Id, out var currentMajorIndex))
+        {
+            return BuildMajorDirectionText(majorStations, currentMajorIndex);
+        }
 
-            if (station1.Number < station2.Number)
+        var allStations = _lineConfiguration.Stations;
+        var allStationsList = allStations.ToList();
+        if (allStations.Count == 0)
+        {
+            return "--";
+        }
+
+        int searchStartIndex;
+        if (state.CurrentStopStation is not null)
+        {
+            var currentIndex = allStationsList.FindIndex(x => x.Id == state.CurrentStopStation.Id);
+            if (currentIndex < 0)
             {
-                // Normal case: station numbers are increasing
-                isBetween = currentNumber > station1.Number && currentNumber < station2.Number;
+                return "--";
             }
-            else
-            {
-                // Circular wrap: station numbers wrap around (e.g., 25 > 1)
-                isBetween = currentNumber > station1.Number || currentNumber < station2.Number;
-            }
 
-            if (isBetween)
+            // After departure, advance from the next station position.
+            searchStartIndex = (currentIndex + 1) % allStations.Count;
+        }
+        else if (state.NextStation is not null)
+        {
+            searchStartIndex = allStationsList.FindIndex(x => x.Id == state.NextStation.Id);
+            if (searchStartIndex < 0)
             {
-                nextMajorIndex = (i + 1) % majorStations.Count;
-                foundSegment = true;
-                break;
+                return "--";
+            }
+        }
+        else
+        {
+            return "--";
+        }
+
+        var nextMajorIndex = FindNextMajorIndexInTravelOrder(allStations, searchStartIndex, majorIndexById);
+        if (nextMajorIndex < 0)
+        {
+            return "--";
+        }
+
+        return BuildMajorDirectionText(majorStations, nextMajorIndex);
+    }
+
+    private static int FindNextMajorIndexInTravelOrder(
+        IReadOnlyList<StationInfo> stations,
+        int startIndex,
+        IReadOnlyDictionary<int, int> majorIndexById)
+    {
+        for (var i = 0; i < stations.Count; i++)
+        {
+            var station = stations[(startIndex + i) % stations.Count];
+            if (majorIndexById.TryGetValue(station.Id, out var majorIndex))
+            {
+                return majorIndex;
             }
         }
 
-        // If not found between major stations, must be at or past the last major station
-        // heading toward the first major station
-        if (!foundSegment)
-        {
-            nextMajorIndex = 0;
-        }
+        return -1;
+    }
 
-        var nextMajorStation = majorStations[nextMajorIndex];
-        var nextNextMajorStation = majorStations[(nextMajorIndex + 1) % majorStations.Count];
-
-        return $"{nextMajorStation.NameJp}·{nextNextMajorStation.NameJp} 方向";
+    private static string BuildMajorDirectionText(IReadOnlyList<StationInfo> majorStations, int majorIndex)
+    {
+        var nextMajorStation = majorStations[majorIndex];
+        var nextNextMajorStation = majorStations[(majorIndex + 1) % majorStations.Count];
+        return $"{nextMajorStation.NameJp}·{nextNextMajorStation.NameJp} 方面";
     }
 
     private void RefreshUpcomingStations(RealtimeSnapshot snapshot, TrainDisplayState state)
