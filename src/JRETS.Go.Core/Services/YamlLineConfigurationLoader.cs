@@ -41,7 +41,8 @@ public sealed class YamlLineConfigurationLoader : ILineConfigurationLoader
         {
             LineInfo = yaml.LineInfo,
             TrainInfo = yaml.TrainInfo ?? [],
-            Stations = yaml.Stations.OrderBy(x => x.Id).ToArray()
+            // Keep station order exactly as defined in YAML.
+            Stations = yaml.Stations.ToArray()
         };
     }
 

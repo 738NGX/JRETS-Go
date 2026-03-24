@@ -631,7 +631,7 @@ public partial class MainWindow : Window
 
         ApplyLineColor();
         ServiceTypeTextBlock.Text = GetServiceTypeDisplayName();
-        DirectionTextBlock.Text = GetDirectionText();
+        DirectionTextBlock.Text = GetDirectionText(state);
 
         // Determine display station and status text based on door and distance
         StationInfo? displayStation = null;
@@ -1039,15 +1039,102 @@ public partial class MainWindow : Window
         return ToServiceLabel(_selectedService.Train.Type);
     }
 
-    private string GetDirectionText()
+    private string GetDirectionText(TrainDisplayState state)
     {
         if (_selectedService is null)
         {
             return "--";
         }
 
-        var terminal = _lineConfiguration.Stations.FirstOrDefault(x => x.Id == _selectedService.Train.Terminal);
-        return terminal is null ? "--" : $"{terminal.NameJp} 行";
+        // For non-loop lines, display the terminal station name
+        if (!_lineConfiguration.LineInfo.IsLoop)
+        {
+            var terminal = _lineConfiguration.Stations.FirstOrDefault(x => x.Id == _selectedService.Train.Terminal);
+            return terminal is null ? "--" : $"{terminal.NameJp} 行";
+        }
+
+        // For loop lines with major stations defined, use them
+        if (_selectedService.Train.MajorStationIds is { Count: > 0 })
+        {
+            return GetLoopLineDirectionByMajorStations(state);
+        }
+
+        // Fallback for other loop lines
+        var fallbackTerminal = _lineConfiguration.Stations.FirstOrDefault(x => x.Id == _selectedService.Train.Terminal);
+        return fallbackTerminal is null ? "--" : $"{fallbackTerminal.NameJp} 行";
+    }
+
+    private string GetLoopLineDirectionByMajorStations(TrainDisplayState state)
+    {
+        // Determine current position
+        var currentStation = state.CurrentStopStation ?? state.NextStation;
+        if (currentStation is null)
+        {
+            return "--";
+        }
+
+        var majorStationIds = _selectedService!.Train.MajorStationIds;
+        if (majorStationIds is null || majorStationIds.Count == 0)
+        {
+            return "--";
+        }
+
+        // Get major stations in order (don't sort, keep yaml order)
+        var majorStations = majorStationIds
+            .Select(id => _lineConfiguration.Stations.FirstOrDefault(x => x.Id == id))
+            .Where(s => s is not null)
+            .Cast<StationInfo>()
+            .ToList();
+
+        if (majorStations.Count < 2)
+        {
+            return "--";
+        }
+
+        var currentNumber = currentStation.Number;
+
+        // Find which segment (between two consecutive major stations) current position is in
+        // Use the order from yaml, not sorted by station number
+        int nextMajorIndex = 0;
+        bool foundSegment = false;
+
+        for (int i = 0; i < majorStations.Count; i++)
+        {
+            var station1 = majorStations[i];
+            var station2 = majorStations[(i + 1) % majorStations.Count];
+
+            bool isBetween = false;
+
+            if (station1.Number < station2.Number)
+            {
+                // Normal case: station numbers are increasing
+                isBetween = currentNumber > station1.Number && currentNumber < station2.Number;
+            }
+            else
+            {
+                // Circular wrap: station numbers wrap around (e.g., 25 > 1)
+                isBetween = currentNumber > station1.Number || currentNumber < station2.Number;
+            }
+
+            if (isBetween)
+            {
+                nextMajorIndex = (i + 1) % majorStations.Count;
+                foundSegment = true;
+                break;
+            }
+        }
+
+        // If not found between major stations, must be at or past the last major station
+        // heading toward the first major station
+        if (!foundSegment)
+        {
+            nextMajorIndex = 0;
+        }
+
+        var nextMajorStation = majorStations[nextMajorIndex];
+        var nextNextMajorStation = majorStations[(nextMajorIndex + 1) % majorStations.Count];
+
+        return $"{nextMajorStation.NameJp}·{nextNextMajorStation.NameJp} 方向";
     }
 
     private void RefreshUpcomingStations(RealtimeSnapshot snapshot, TrainDisplayState state)
@@ -1056,7 +1143,6 @@ public partial class MainWindow : Window
 
         var stopStations = _lineConfiguration.Stations
             .Where(IsStopForSelectedService)
-            .OrderBy(x => x.Id)
             .ToList();
 
         if (stopStations.Count == 0)
@@ -1269,27 +1355,47 @@ public partial class MainWindow : Window
 
     private int? ResolveAnnouncementTargetStationId(TrainDisplayState state)
     {
-        var orderedStations = _lineConfiguration.Stations.OrderBy(x => x.Id).ToList();
+        var orderedStations = _lineConfiguration.Stations.ToList();
         if (orderedStations.Count == 0)
         {
             return null;
         }
 
-        var anchorStationId = state.CurrentStopStation is not null
-            ? state.CurrentStopStation.Id + 1
-            : state.NextStation?.Id;
+        var anchorIndex = state.CurrentStopStation is not null
+            ? orderedStations.FindIndex(x => x.Id == state.CurrentStopStation.Id) + 1
+            : state.NextStation is not null
+                ? orderedStations.FindIndex(x => x.Id == state.NextStation.Id)
+                : -1;
 
-        if (anchorStationId is null)
+        if (anchorIndex < 0)
         {
             return null;
         }
 
         // For rapid/express services, state.NextStation can point to a pass-through station.
         // Always target the next actual stopping station for the selected service.
-        var nextStop = orderedStations
-            .FirstOrDefault(x => x.Id >= anchorStationId.Value && IsStopForSelectedService(x));
+        for (var i = anchorIndex; i < orderedStations.Count; i++)
+        {
+            if (IsStopForSelectedService(orderedStations[i]))
+            {
+                return orderedStations[i].Id;
+            }
+        }
 
-        return nextStop?.Id;
+        if (!_lineConfiguration.LineInfo.IsLoop)
+        {
+            return null;
+        }
+
+        for (var i = 0; i < anchorIndex && i < orderedStations.Count; i++)
+        {
+            if (IsStopForSelectedService(orderedStations[i]))
+            {
+                return orderedStations[i].Id;
+            }
+        }
+
+        return null;
     }
 
     private bool HasStationAnnouncement(int stationId, int paIndex)

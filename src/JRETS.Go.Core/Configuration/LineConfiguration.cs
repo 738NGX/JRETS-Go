@@ -20,6 +20,8 @@ public sealed class LineInfo
     public required string LineColor { get; init; }
 
     public required string Code { get; init; }
+
+    public bool IsLoop { get; init; } = false;
 }
 
 public sealed class TrainInfo
@@ -29,6 +31,12 @@ public sealed class TrainInfo
     public required string Type { get; init; }
 
     public required int Terminal { get; init; }
+
+    public List<int>? MajorStationIds { get; init; }
+
+    public int? CcwDirectionStation { get; init; }
+
+    public int? ClockwiseDirectionStation { get; init; }
 }
 
 public sealed class StationInfo

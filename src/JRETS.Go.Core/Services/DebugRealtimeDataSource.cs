@@ -32,7 +32,7 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
             throw new ArgumentException("Debug mode requires at least two stations.", nameof(stations));
         }
 
-        _stations = stations.OrderBy(x => x.Id).ToArray();
+        _stations = stations.ToArray();
         _currentStationIndex = 0;
     }
 
