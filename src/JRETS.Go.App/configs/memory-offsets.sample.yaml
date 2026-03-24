@@ -1,0 +1,11 @@
+process_name: JREAST_TrainSimulator.exe
+module_name: JREAST_TrainSimulator.exe
+offsets:
+  next_station_id: "0x110B1D8"
+  door_state: "0x1765F60"
+  main_clock_seconds: "0x14AAE84"
+  timetable_second: "0x174907C"
+  timetable_minute: "0x1749080"
+  timetable_hour: "0x1749084"
+  current_distance: "0x14AAE18"
+  target_stop_distance: "0x10BEDF0"

@@ -1,0 +1,1008 @@
+﻿using System.IO;
+using System.Linq;
+using System.Collections.ObjectModel;
+using System.Collections.Generic;
+using System.Windows.Interop;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Controls;
+using System.Windows.Threading;
+using JRETS.Go.App.Interop;
+using JRETS.Go.Core.Configuration;
+using JRETS.Go.Core.Runtime;
+using JRETS.Go.Core.Services;
+
+namespace JRETS.Go.App;
+
+/// <summary>
+/// Interaction logic for MainWindow.xaml
+/// </summary>
+public partial class MainWindow : Window
+{
+    private const int TimelineVisibleStationCount = 8;
+    private const int TimelineVisibleTokenCount = TimelineVisibleStationCount * 2 - 1;
+    private const double StationArrowWidth = 128;
+    private const double SegmentArrowWidth = 32;
+    private const double ArrowHeight = 32;
+    private const double ArrowNotchDepth = 16;
+    private const double ArrowTipWidth = 12;
+    private const int HotKeyStartSession = 1001;
+    private const int HotKeyEndSession = 1002;
+    private const int HotKeyToggleClickThrough = 1003;
+
+    private string _lineConfigPath;
+    private readonly string _offsetsConfigPath;
+    private readonly string _scoringConfigPath;
+    private readonly FileSystemWatcher _configWatcher;
+    private readonly DispatcherTimer _configReloadDebounceTimer;
+
+    private LineConfiguration _lineConfiguration;
+    private DebugRealtimeDataSource _debugDataSource;
+    private ProcessMemoryRealtimeDataSource? _memoryDataSource;
+    private readonly DisplayStateResolver _displayStateResolver;
+    private StopScoringService _stopScoringService;
+    private readonly DriveReportExporter _driveReportExporter;
+    private readonly DriveReportReader _driveReportReader;
+    private readonly DispatcherTimer _refreshTimer;
+    private readonly ObservableCollection<UpcomingStationItem> _upcomingStations = [];
+    private readonly List<LineConfigurationOption> _lineConfigOptions = [];
+    private readonly List<TrainServiceOption> _serviceOptions = [];
+    private readonly HashSet<int> _registeredHotKeys = [];
+
+    private nint _windowHandle;
+    private bool _sessionRunning;
+    private bool _clickThroughEnabled;
+    private bool _debugModeEnabled;
+    private bool _usingLiveMemory;
+    private bool _suppressComboChange;
+    private bool _timelineInitialized;
+    private bool _timelineLastDoorOpen;
+    private int _timelineActiveToken;
+    private int _timelineWindowStart;
+    private string _lastDataSourceError = string.Empty;
+    private bool _previousDoorOpen;
+    private double? _activeApproachTargetStopDistance;
+    private int? _activeApproachScheduledSeconds;
+    private DateTime _sessionStartedAt;
+    private readonly List<StationStopScore> _stationScores = [];
+    private int? _lastScoredStationId;
+    private TrainServiceOption? _selectedService;
+    private ScoringConfiguration _scoringConfiguration = new();
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        var configsDirectory = Path.Combine(AppContext.BaseDirectory, "configs");
+        _lineConfigPath = ResolveLineConfigPath(configsDirectory);
+        _offsetsConfigPath = ResolveConfigPath(configsDirectory, "memory-offsets.sample.yaml", "memory-offsets.yaml");
+        _scoringConfigPath = ResolveConfigPath(configsDirectory, "scoring.sample.yaml", "scoring.yaml");
+
+        var loader = new YamlLineConfigurationLoader();
+        _lineConfiguration = loader.LoadFromFile(_lineConfigPath);
+
+        _debugDataSource = new DebugRealtimeDataSource(_lineConfiguration.Stations);
+        _displayStateResolver = new DisplayStateResolver();
+        _stopScoringService = new StopScoringService(_scoringConfiguration);
+        _driveReportExporter = new DriveReportExporter();
+        _driveReportReader = new DriveReportReader();
+        UpcomingStationsItemsControl.ItemsSource = _upcomingStations;
+
+        LineConfigComboBox.DisplayMemberPath = nameof(LineConfigurationOption.DisplayName);
+        ServiceTypeComboBox.DisplayMemberPath = nameof(TrainServiceOption.DisplayName);
+
+        LoadLineConfigurationOptions();
+
+        ReloadConfigurations();
+
+        _configWatcher = new FileSystemWatcher(Path.Combine(AppContext.BaseDirectory, "configs"), "*.yaml")
+        {
+            IncludeSubdirectories = false,
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName
+        };
+        _configWatcher.Changed += OnConfigChanged;
+        _configWatcher.Created += OnConfigChanged;
+        _configWatcher.Renamed += OnConfigChanged;
+        _configWatcher.EnableRaisingEvents = true;
+
+        _configReloadDebounceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _configReloadDebounceTimer.Tick += ApplyDebouncedConfigReload;
+
+        _refreshTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(200)
+        };
+        _refreshTimer.Tick += RefreshTimerOnTick;
+        _refreshTimer.Start();
+
+        UpdateDisplay();
+
+        Loaded += OnLoaded;
+        Closed += OnClosed;
+    }
+
+    private void StartSessionClick(object sender, RoutedEventArgs e)
+    {
+        StartSession();
+    }
+
+    private void EndSessionClick(object sender, RoutedEventArgs e)
+    {
+        EndSession();
+    }
+
+    private void DebugAdvanceClick(object sender, RoutedEventArgs e)
+    {
+        DebugAdvance();
+    }
+
+    private void DebugAdvance()
+    {
+        if (!_sessionRunning || _usingLiveMemory)
+        {
+            return;
+        }
+
+        _debugDataSource.DebugAdvance();
+        UpdateDisplay();
+    }
+
+    private void ToggleClickThroughClick(object sender, RoutedEventArgs e)
+    {
+        ToggleClickThrough();
+    }
+
+    private void ToggleDebugModeClick(object sender, RoutedEventArgs e)
+    {
+        _debugModeEnabled = !_debugModeEnabled;
+        UpdateDisplay();
+    }
+
+    private void LineConfigSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressComboChange)
+        {
+            return;
+        }
+
+        if (LineConfigComboBox.SelectedItem is not LineConfigurationOption option)
+        {
+            return;
+        }
+
+        ApplyLineConfiguration(option);
+        UpdateDisplay();
+    }
+
+    private void ServiceTypeSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressComboChange)
+        {
+            return;
+        }
+
+        _selectedService = ServiceTypeComboBox.SelectedItem as TrainServiceOption;
+        _timelineInitialized = false;
+        UpdateDisplay();
+    }
+
+    private void ExitAppClick(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void OpenLatestReportClick(object sender, RoutedEventArgs e)
+    {
+        OpenLatestReport();
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Left = 0;
+        Top = 0;
+        Width = SystemParameters.PrimaryScreenWidth;
+        Height = SystemParameters.PrimaryScreenHeight;
+
+        var interopHelper = new WindowInteropHelper(this);
+        _windowHandle = interopHelper.Handle;
+
+        var source = HwndSource.FromHwnd(_windowHandle);
+        source?.AddHook(WndProc);
+
+        RegisterGlobalHotKeys();
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        if (_windowHandle == nint.Zero)
+        {
+            return;
+        }
+
+        foreach (var hotKeyId in _registeredHotKeys)
+        {
+            NativeMethods.UnregisterHotKey(_windowHandle, hotKeyId);
+        }
+
+        _configReloadDebounceTimer.Stop();
+        _configWatcher.Dispose();
+        _memoryDataSource?.Dispose();
+    }
+
+    private void OnConfigChanged(object sender, FileSystemEventArgs e)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            _configReloadDebounceTimer.Stop();
+            _configReloadDebounceTimer.Start();
+        });
+    }
+
+    private void ApplyDebouncedConfigReload(object? sender, EventArgs e)
+    {
+        _configReloadDebounceTimer.Stop();
+
+        try
+        {
+            ReloadConfigurations();
+            _lastDataSourceError = "Config reloaded.";
+        }
+        catch (Exception ex)
+        {
+            _lastDataSourceError = $"Config reload failed: {ex.Message}";
+        }
+
+        UpdateDisplay();
+    }
+
+    private void RegisterGlobalHotKeys()
+    {
+        RegisterHotKey(HotKeyStartSession, HotKeyModifiers.NoRepeat, 0x78); // F9
+        RegisterHotKey(HotKeyEndSession, HotKeyModifiers.NoRepeat, 0x79); // F10
+        RegisterHotKey(HotKeyToggleClickThrough, HotKeyModifiers.NoRepeat, 0x76); // F7
+    }
+
+    private void RegisterHotKey(int id, HotKeyModifiers modifiers, uint virtualKey)
+    {
+        if (!NativeMethods.RegisterHotKey(_windowHandle, id, (uint)modifiers, virtualKey))
+        {
+            _lastDataSourceError =
+                $"HotKey register failed for id={id}. Some shortcuts may be unavailable because another app already uses them.";
+            return;
+        }
+
+        _registeredHotKeys.Add(id);
+    }
+
+    private nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+    {
+        if (msg != NativeMethods.WmHotKey)
+        {
+            return nint.Zero;
+        }
+
+        switch (wParam.ToInt32())
+        {
+            case HotKeyStartSession:
+                StartSession();
+                handled = true;
+                break;
+            case HotKeyEndSession:
+                EndSession();
+                handled = true;
+                break;
+            case HotKeyToggleClickThrough:
+                ToggleClickThrough();
+                handled = true;
+                break;
+        }
+
+        return nint.Zero;
+    }
+
+    private void StartSession()
+    {
+        _sessionRunning = true;
+        _timelineInitialized = false;
+        _sessionStartedAt = DateTime.Now;
+        _stationScores.Clear();
+        _lastScoredStationId = null;
+        _activeApproachTargetStopDistance = null;
+        _activeApproachScheduledSeconds = null;
+        _usingLiveMemory = TryActivateLiveMemoryMode();
+        if (!_usingLiveMemory)
+        {
+            _debugDataSource.StartSession();
+        }
+
+        _previousDoorOpen = GetCurrentSnapshot().DoorOpen;
+
+        UpdateDisplay();
+    }
+
+    private void EndSession()
+    {
+        if (_sessionRunning)
+        {
+            ExportSessionReport();
+        }
+
+        _sessionRunning = false;
+        _usingLiveMemory = false;
+        _timelineInitialized = false;
+        _activeApproachTargetStopDistance = null;
+        _activeApproachScheduledSeconds = null;
+        UpdateDisplay();
+    }
+
+    private void ToggleClickThrough()
+    {
+        if (_windowHandle == nint.Zero)
+        {
+            return;
+        }
+
+        _clickThroughEnabled = !_clickThroughEnabled;
+
+        var exStyle = NativeMethods.GetWindowLong(_windowHandle, NativeMethods.GwlExStyle);
+        if (_clickThroughEnabled)
+        {
+            exStyle |= NativeMethods.WsExTransparent | NativeMethods.WsExLayered;
+        }
+        else
+        {
+            exStyle &= ~NativeMethods.WsExTransparent;
+        }
+
+        NativeMethods.SetWindowLong(_windowHandle, NativeMethods.GwlExStyle, exStyle);
+        UpdateDisplay();
+    }
+
+    private void RefreshTimerOnTick(object? sender, EventArgs e)
+    {
+        if (_sessionRunning && !_usingLiveMemory)
+        {
+            _debugDataSource.TickRunning();
+        }
+
+        UpdateDisplay();
+    }
+
+    private void UpdateDisplay()
+    {
+        var snapshot = GetCurrentSnapshot();
+        var state = _displayStateResolver.Resolve(_lineConfiguration, snapshot);
+        CaptureStopScore(snapshot, state);
+
+        var sourceText = _usingLiveMemory ? "LiveMemory" : "Debug";
+
+        ApplyLineColor();
+        ServiceTypeTextBlock.Text = GetServiceTypeDisplayName();
+        DirectionTextBlock.Text = GetDirectionText();
+
+        // Determine display station and status text based on door and distance
+        StationInfo? displayStation = null;
+        string statusText = "次は";
+
+        if (snapshot.DoorOpen && state.CurrentStopStation is not null)
+        {
+            // ただいま (currently stopped at this station)
+            displayStation = state.CurrentStopStation;
+            statusText = "ただいま";
+        }
+        else if (!snapshot.DoorOpen && state.NextStation is not null)
+        {
+            // Check remaining distance to next station
+            var remainingDistance = snapshot.TargetStopDistanceMeters - snapshot.CurrentDistanceMeters;
+            if (remainingDistance < 400)
+            {
+                // まもなく (approaching next station - less than 400m away)
+                displayStation = state.NextStation;
+                statusText = "まもなく";
+            }
+            else
+            {
+                // 次は (normal state - more than 400m away)
+                displayStation = state.NextStation;
+                statusText = "次は";
+            }
+        }
+        else
+        {
+            // 次は (next station, normal state)
+            displayStation = state.NextStation;
+            statusText = "次は";
+        }
+
+        NextStationStatusTextBlock.Text = statusText;
+
+        var hasStationCode = displayStation is not null && !string.IsNullOrWhiteSpace(displayStation.Code);
+        NextStationNameTextBlock.Text = displayStation?.NameJp ?? "--";
+        StationCode.Text = hasStationCode ? displayStation!.Code! : string.Empty;
+        StationCode.Foreground = hasStationCode ? Brushes.White : Brushes.Transparent;
+        StationCodeBadgeOuterBorder.Background = hasStationCode ? Brushes.Black : Brushes.Transparent;
+        LineCode.Text = _lineConfiguration.LineInfo.Code;
+        LineNumberBadgeTextBlock.Text = displayStation is null ? "--" : displayStation.Number.ToString("00");
+
+        RefreshUpcomingStations(snapshot, state);
+
+        ErrorTextBlock.Text = string.IsNullOrWhiteSpace(_lastDataSourceError)
+            ? string.Empty
+            : $"Error: {_lastDataSourceError}";
+
+        ToggleDebugModeButton.Content = _debugModeEnabled ? "Disable Debug Mode" : "Enable Debug Mode";
+        DebugModeStateText.Text = _debugModeEnabled
+            ? $"Mode: On ({sourceText})"
+            : "Mode: Off";
+
+        MemNextStationText.Text = $"Current Station Id: {snapshot.NextStationId}";
+        MemDoorText.Text = $"Door Open: {(snapshot.DoorOpen ? "True" : "False")}";
+        var clockTime = TimeSpan.FromSeconds(snapshot.MainClockSeconds);
+        MemMainClockText.Text = $"Main Clock: {clockTime.Hours:D2}:{clockTime.Minutes:D2}:{clockTime.Seconds:D2}";
+        MemTimetableText.Text =
+            $"Timetable (H:M:S): {snapshot.TimetableHour:D2}:{snapshot.TimetableMinute:D2}:{snapshot.TimetableSecond:D2}";
+        MemCurrentDistanceText.Text = $"Current Distance (m): {snapshot.CurrentDistanceMeters:F2}";
+        MemTargetDistanceText.Text = $"Target Stop Distance (m): {snapshot.TargetStopDistanceMeters:F2}";
+
+        DebugActionsPanel.Visibility = _debugModeEnabled ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void CaptureStopScore(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        if (!_sessionRunning)
+        {
+            _previousDoorOpen = snapshot.DoorOpen;
+            return;
+        }
+
+        var doorOpenTransition = !_previousDoorOpen && snapshot.DoorOpen;
+        var doorCloseTransition = _previousDoorOpen && !snapshot.DoorOpen;
+
+        if (doorCloseTransition)
+        {
+            // Latch next-stop targets at departure start and keep them until next stop scoring.
+            _activeApproachTargetStopDistance = snapshot.TargetStopDistanceMeters;
+            _activeApproachScheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
+        }
+
+        if (!snapshot.DoorOpen && (_activeApproachTargetStopDistance is null || _activeApproachScheduledSeconds is null))
+        {
+            // Fallback when session starts while already running between stations.
+            _activeApproachTargetStopDistance = snapshot.TargetStopDistanceMeters;
+            _activeApproachScheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
+        }
+
+        _previousDoorOpen = snapshot.DoorOpen;
+
+        if (!doorOpenTransition || state.CurrentStopStation is null)
+        {
+            return;
+        }
+
+        if (_lastScoredStationId == state.CurrentStopStation.Id)
+        {
+            return;
+        }
+
+        var scoringSnapshot = BuildScoringSnapshot(snapshot);
+        var stopScore = _stopScoringService.ScoreStop(state.CurrentStopStation, scoringSnapshot);
+        _stationScores.Add(stopScore);
+        _lastScoredStationId = state.CurrentStopStation.Id;
+        _activeApproachTargetStopDistance = null;
+        _activeApproachScheduledSeconds = null;
+    }
+
+    private RealtimeSnapshot BuildScoringSnapshot(RealtimeSnapshot currentSnapshot)
+    {
+        if (_activeApproachTargetStopDistance is null || _activeApproachScheduledSeconds is null)
+        {
+            return currentSnapshot;
+        }
+
+        var scheduledSeconds = _activeApproachScheduledSeconds.Value;
+        var scheduledHour = scheduledSeconds / 3600;
+        var scheduledMinute = (scheduledSeconds % 3600) / 60;
+        var scheduledSecond = scheduledSeconds % 60;
+
+        return new RealtimeSnapshot
+        {
+            CapturedAt = currentSnapshot.CapturedAt,
+            NextStationId = currentSnapshot.NextStationId,
+            DoorOpen = currentSnapshot.DoorOpen,
+            MainClockSeconds = currentSnapshot.MainClockSeconds,
+            TimetableHour = scheduledHour,
+            TimetableMinute = scheduledMinute,
+            TimetableSecond = scheduledSecond,
+            CurrentDistanceMeters = currentSnapshot.CurrentDistanceMeters,
+            TargetStopDistanceMeters = _activeApproachTargetStopDistance.Value
+        };
+    }
+
+    private double GetTotalScore()
+    {
+        if (_stationScores.Count == 0)
+        {
+            return 0;
+        }
+
+        return Math.Round(_stationScores.Average(x => x.FinalScore), 1);
+    }
+
+    private void ExportSessionReport()
+    {
+        var report = new DriveSessionReport
+        {
+            StartedAt = _sessionStartedAt,
+            EndedAt = DateTime.Now,
+            DataSource = _usingLiveMemory ? "LiveMemory" : "Debug",
+            TotalScore = GetTotalScore(),
+            Stops = _stationScores.ToArray()
+        };
+
+        var reportsDirectory = Path.Combine(AppContext.BaseDirectory, "reports");
+        var jsonPath = _driveReportExporter.Export(reportsDirectory, report);
+        var csvPath = _driveReportExporter.ExportCsv(reportsDirectory, report);
+        _lastDataSourceError = $"Report exported: {Path.GetFileName(jsonPath)}, {Path.GetFileName(csvPath)}";
+    }
+
+    private void OpenLatestReport()
+    {
+        var reportsDirectory = Path.Combine(AppContext.BaseDirectory, "reports");
+        var latestPath = _driveReportReader.FindLatestJsonReportPath(reportsDirectory);
+        if (string.IsNullOrWhiteSpace(latestPath))
+        {
+            _lastDataSourceError = "No report file found.";
+            UpdateDisplay();
+            return;
+        }
+
+        try
+        {
+            var report = _driveReportReader.Load(latestPath);
+            var viewer = new ReportViewerWindow(report, latestPath);
+            viewer.Show();
+        }
+        catch (Exception ex)
+        {
+            _lastDataSourceError = $"Open report failed: {ex.Message}";
+            UpdateDisplay();
+        }
+    }
+
+    private bool TryActivateLiveMemoryMode()
+    {
+        if (_memoryDataSource is null)
+        {
+            return false;
+        }
+
+        if (_memoryDataSource.TryAttach())
+        {
+            _lastDataSourceError = string.Empty;
+            return true;
+        }
+
+        _lastDataSourceError = _memoryDataSource.LastAttachError;
+        return false;
+    }
+
+    private RealtimeSnapshot GetCurrentSnapshot()
+    {
+        if (_sessionRunning && _usingLiveMemory && _memoryDataSource is not null)
+        {
+            try
+            {
+                _lastDataSourceError = string.Empty;
+                return _memoryDataSource.GetSnapshot();
+            }
+            catch (Exception ex)
+            {
+                _lastDataSourceError = ex.Message;
+                _usingLiveMemory = false;
+                _debugDataSource.StartSession();
+            }
+        }
+
+        return _debugDataSource.GetSnapshot();
+    }
+
+    private void ReloadConfigurations()
+    {
+        LoadLineConfigurationOptions();
+
+        if (File.Exists(_scoringConfigPath))
+        {
+            var scoringLoader = new YamlScoringConfigurationLoader();
+            _scoringConfiguration = scoringLoader.LoadFromFile(_scoringConfigPath);
+        }
+        else
+        {
+            _scoringConfiguration = new ScoringConfiguration();
+        }
+
+        _stopScoringService = new StopScoringService(_scoringConfiguration);
+
+        _memoryDataSource?.Dispose();
+        _memoryDataSource = null;
+
+        if (File.Exists(_offsetsConfigPath))
+        {
+            var offsetsLoader = new YamlMemoryOffsetsConfigurationLoader();
+            var offsets = offsetsLoader.LoadFromFile(_offsetsConfigPath);
+            _memoryDataSource = new ProcessMemoryRealtimeDataSource(offsets);
+        }
+    }
+
+    private void LoadLineConfigurationOptions()
+    {
+        var configsDirectory = Path.Combine(AppContext.BaseDirectory, "configs");
+        var lineLoader = new YamlLineConfigurationLoader();
+        var previousPath = _lineConfigPath;
+
+        _lineConfigOptions.Clear();
+
+        if (Directory.Exists(configsDirectory))
+        {
+            foreach (var file in Directory.EnumerateFiles(configsDirectory, "*.yaml"))
+            {
+                try
+                {
+                    var config = lineLoader.LoadFromFile(file);
+                    _lineConfigOptions.Add(new LineConfigurationOption
+                    {
+                        FilePath = file,
+                        Configuration = config,
+                        DisplayName = $"{config.LineInfo.NameJp} ({Path.GetFileName(file)})"
+                    });
+                }
+                catch
+                {
+                    // ignore non-line yaml files
+                }
+            }
+        }
+
+        if (_lineConfigOptions.Count == 0 && File.Exists(previousPath))
+        {
+            var fallbackConfig = lineLoader.LoadFromFile(previousPath);
+            _lineConfigOptions.Add(new LineConfigurationOption
+            {
+                FilePath = previousPath,
+                Configuration = fallbackConfig,
+                DisplayName = $"{fallbackConfig.LineInfo.NameJp} ({Path.GetFileName(previousPath)})"
+            });
+        }
+
+        var selected = _lineConfigOptions.FirstOrDefault(x =>
+            string.Equals(x.FilePath, previousPath, StringComparison.OrdinalIgnoreCase)) ?? _lineConfigOptions.FirstOrDefault();
+
+        _suppressComboChange = true;
+        LineConfigComboBox.ItemsSource = null;
+        LineConfigComboBox.ItemsSource = _lineConfigOptions;
+        LineConfigComboBox.SelectedItem = selected;
+        _suppressComboChange = false;
+
+        if (selected is not null)
+        {
+            ApplyLineConfiguration(selected);
+        }
+    }
+
+    private void ApplyLineConfiguration(LineConfigurationOption option)
+    {
+        _lineConfigPath = option.FilePath;
+        _lineConfiguration = option.Configuration;
+        _debugDataSource = new DebugRealtimeDataSource(_lineConfiguration.Stations);
+        _timelineInitialized = false;
+        PopulateServiceOptions();
+
+        if (_sessionRunning && !_usingLiveMemory)
+        {
+            _debugDataSource.StartSession();
+        }
+    }
+
+    private void PopulateServiceOptions()
+    {
+        var currentServiceId = _selectedService?.Train.Id;
+        _serviceOptions.Clear();
+
+        var sourceTrainInfos = _lineConfiguration.TrainInfo.Count == 0
+            ? [new TrainInfo { Id = "LOCAL", Type = "Local", Terminal = _lineConfiguration.Stations.Last().Id }]
+            : _lineConfiguration.TrainInfo;
+
+        foreach (var train in sourceTrainInfos)
+        {
+            _serviceOptions.Add(new TrainServiceOption
+            {
+                Train = train,
+                DisplayName = $"{ToServiceLabel(train.Type)} ({train.Id})"
+            });
+        }
+
+        _suppressComboChange = true;
+        ServiceTypeComboBox.ItemsSource = null;
+        ServiceTypeComboBox.ItemsSource = _serviceOptions;
+        ServiceTypeComboBox.SelectedItem = _serviceOptions.FirstOrDefault(x => x.Train.Id == currentServiceId) ?? _serviceOptions.FirstOrDefault();
+        _suppressComboChange = false;
+
+        _selectedService = ServiceTypeComboBox.SelectedItem as TrainServiceOption;
+    }
+
+    private void ApplyLineColor()
+    {
+        var color = _lineConfiguration.LineInfo.LineColor;
+        if (string.IsNullOrWhiteSpace(color))
+        {
+            LineColorPreview.Background = new SolidColorBrush(Color.FromRgb(0, 178, 229));
+            return;
+        }
+
+        try
+        {
+            var parsed = ColorConverter.ConvertFromString(color);
+            if (parsed is Color c)
+            {
+                LineColorPreview.Background = new SolidColorBrush(c);
+                return;
+            }
+        }
+        catch
+        {
+            // fall back to default line color
+        }
+
+        LineColorPreview.Background = new SolidColorBrush(Color.FromRgb(0, 178, 229));
+    }
+
+    private string GetServiceTypeDisplayName()
+    {
+        if (_selectedService is null)
+        {
+            return "各駅停車";
+        }
+
+        return ToServiceLabel(_selectedService.Train.Type);
+    }
+
+    private string GetDirectionText()
+    {
+        if (_selectedService is null)
+        {
+            return "--";
+        }
+
+        var terminal = _lineConfiguration.Stations.FirstOrDefault(x => x.Id == _selectedService.Train.Terminal);
+        return terminal is null ? "--" : $"{terminal.NameJp} 行";
+    }
+
+    private void RefreshUpcomingStations(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        _upcomingStations.Clear();
+
+        var stopStations = _lineConfiguration.Stations
+            .Where(IsStopForSelectedService)
+            .OrderBy(x => x.Id)
+            .ToList();
+
+        if (stopStations.Count == 0)
+        {
+            return;
+        }
+
+        var totalTokens = Math.Max(1, stopStations.Count * 2 - 1);
+        UpdateTimelineState(snapshot, state, stopStations, totalTokens);
+
+        var maxStart = Math.Max(0, totalTokens - TimelineVisibleTokenCount);
+        _timelineWindowStart = Math.Clamp(_timelineWindowStart, 0, maxStart);
+
+        var futureBrush = GetFutureBrush();
+        var finishedBrush = new SolidColorBrush(Color.FromRgb(120, 120, 120));
+        var activeBrush = new SolidColorBrush(Color.FromRgb(190, 24, 24));
+
+        var endExclusive = Math.Min(totalTokens, _timelineWindowStart + TimelineVisibleTokenCount);
+        for (var tokenIndex = _timelineWindowStart; tokenIndex < endExclusive; tokenIndex++)
+        {
+            var isStation = tokenIndex % 2 == 0;
+            var stationIndex = tokenIndex / 2;
+            var station = stopStations[Math.Clamp(stationIndex, 0, stopStations.Count - 1)];
+
+            var fill = tokenIndex < _timelineActiveToken
+                ? finishedBrush
+                : tokenIndex == _timelineActiveToken
+                    ? activeBrush
+                    : futureBrush;
+
+            _upcomingStations.Add(new UpcomingStationItem
+            {
+                NameLabel = isStation ? station.NameJp : string.Empty,
+                CodeLabel = isStation ? $"{_lineConfiguration.LineInfo.Code}-{station.Number:D2}" : string.Empty,
+                ArrowFill = fill,
+                ArrowGeometry = BuildArrowGeometry(tokenIndex == 0, isStation),
+                ArrowWidth = isStation ? StationArrowWidth : SegmentArrowWidth,
+                StationMarkerVisibility = isStation ? Visibility.Visible : Visibility.Collapsed
+            });
+        }
+    }
+
+    private bool IsStopForSelectedService(StationInfo station)
+    {
+        if (_selectedService is null || string.IsNullOrWhiteSpace(_selectedService.Train.Id))
+        {
+            return true;
+        }
+
+        return station.SkipTrain.All(x => !string.Equals(x, _selectedService.Train.Id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void UpdateTimelineState(
+        RealtimeSnapshot snapshot,
+        TrainDisplayState state,
+        IReadOnlyList<StationInfo> stopStations,
+        int totalTokens)
+    {
+        var currentPos = ResolveTimelineStationPosition(snapshot, stopStations);
+        var expectedActiveToken = snapshot.DoorOpen
+            ? currentPos * 2
+            : Math.Min(totalTokens - 1, currentPos * 2 + 1);
+
+        if (!_timelineInitialized)
+        {
+            _timelineActiveToken = expectedActiveToken;
+            _timelineWindowStart = _timelineActiveToken <= 2 ? 0 : ((Math.Max(0, _timelineActiveToken - 1) / 2) * 2);
+            _timelineLastDoorOpen = snapshot.DoorOpen;
+            _timelineInitialized = true;
+            return;
+        }
+
+        // Always align timeline to latest snapshot to avoid drift when game state jumps
+        // (e.g. station switching, missed door-edge samples, prolonged driving).
+        _timelineActiveToken = expectedActiveToken;
+        _timelineWindowStart = _timelineActiveToken <= 2 ? 0 : ((Math.Max(0, _timelineActiveToken - 1) / 2) * 2);
+        _timelineLastDoorOpen = snapshot.DoorOpen;
+    }
+
+    private static int ResolveTimelineStationPosition(RealtimeSnapshot snapshot, IReadOnlyList<StationInfo> stopStations)
+    {
+        if (stopStations.Count == 0)
+        {
+            return 0;
+        }
+
+        // First try exact current-station match.
+        var exactIndex = stopStations.ToList().FindIndex(x => x.Id == snapshot.NextStationId);
+        if (exactIndex >= 0)
+        {
+            return exactIndex;
+        }
+
+        // If current station is not a stopping station for selected service,
+        // anchor to the nearest previous stop to keep timeline stable.
+        var previousIndex = stopStations
+            .Select((station, index) => new { station.Id, index })
+            .Where(x => x.Id < snapshot.NextStationId)
+            .Select(x => x.index)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        return Math.Clamp(previousIndex, 0, stopStations.Count - 1);
+    }
+
+    private Brush GetFutureBrush()
+    {
+        if (LineColorPreview.Background is SolidColorBrush solid)
+        {
+            return solid;
+        }
+
+        return new SolidColorBrush(Color.FromRgb(0, 178, 229));
+    }
+
+    private static string BuildArrowGeometry(bool isFirstToken, bool isStationToken)
+    {
+        var width = isStationToken ? StationArrowWidth : SegmentArrowWidth;
+        var bodyEndX = width - ArrowTipWidth;
+        var midY = ArrowHeight / 2;
+        var notch = Math.Min(ArrowNotchDepth, width / 2 - 2);
+
+        return isFirstToken
+            ? $"M0,0 L{bodyEndX:0.##},0 L{width:0.##},{midY:0.##} L{bodyEndX:0.##},{ArrowHeight:0.##} L0,{ArrowHeight:0.##} Z"
+            : $"M0,0 L{bodyEndX:0.##},0 L{width:0.##},{midY:0.##} L{bodyEndX:0.##},{ArrowHeight:0.##} L0,{ArrowHeight:0.##} L{notch:0.##},{midY:0.##} Z";
+    }
+
+    private static string ToServiceLabel(string rawType)
+    {
+        if (string.Equals(rawType, "Local", StringComparison.OrdinalIgnoreCase))
+        {
+            return "各駅停車";
+        }
+
+        if (string.Equals(rawType, "Rapid", StringComparison.OrdinalIgnoreCase))
+        {
+            return "快速";
+        }
+
+        return rawType;
+    }
+
+    private static string ResolveConfigPath(string configsDirectory, string sampleFileName, string preferredFileName)
+    {
+        var preferredPath = Path.Combine(configsDirectory, preferredFileName);
+        if (File.Exists(preferredPath))
+        {
+            return preferredPath;
+        }
+
+        return Path.Combine(configsDirectory, sampleFileName);
+    }
+
+    private static string ResolveLineConfigPath(string configsDirectory)
+    {
+        var preferredPath = Path.Combine(configsDirectory, "keihin-negishi.yaml");
+        if (File.Exists(preferredPath))
+        {
+            return preferredPath;
+        }
+
+        var samplePath = Path.Combine(configsDirectory, "keihin-negishi.sample.yaml");
+        if (File.Exists(samplePath))
+        {
+            return samplePath;
+        }
+
+        if (!Directory.Exists(configsDirectory))
+        {
+            return samplePath;
+        }
+
+        var loader = new YamlLineConfigurationLoader();
+        foreach (var file in Directory.EnumerateFiles(configsDirectory, "*.yaml"))
+        {
+            try
+            {
+                loader.LoadFromFile(file);
+                return file;
+            }
+            catch
+            {
+                // ignore non-line yaml files
+            }
+        }
+
+        return samplePath;
+    }
+
+    private sealed class LineConfigurationOption
+    {
+        public required string DisplayName { get; init; }
+
+        public required string FilePath { get; init; }
+
+        public required LineConfiguration Configuration { get; init; }
+    }
+
+    private sealed class TrainServiceOption
+    {
+        public required string DisplayName { get; init; }
+
+        public required TrainInfo Train { get; init; }
+    }
+
+    private sealed class UpcomingStationItem
+    {
+        public required string NameLabel { get; init; }
+
+        public required string CodeLabel { get; init; }
+
+        public required Brush ArrowFill { get; init; }
+
+        public required string ArrowGeometry { get; init; }
+
+        public required double ArrowWidth { get; init; }
+
+        public required Visibility StationMarkerVisibility { get; init; }
+    }
+}

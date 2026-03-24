@@ -1,0 +1,84 @@
+<Window x:Class="JRETS.Go.App.ReportViewerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Drive Report"
+        Width="900"
+        Height="640"
+        WindowStartupLocation="CenterScreen"
+        Background="#101820">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="HeaderTextBlock"
+                   Grid.Row="0"
+                   Foreground="#EAF4FF"
+                   FontSize="24"
+                   FontWeight="SemiBold" />
+
+        <TextBlock x:Name="MetaTextBlock"
+                   Grid.Row="1"
+                   Margin="0,8,0,12"
+                   Foreground="#9FB5CC"
+                   FontSize="13" />
+
+        <DataGrid Grid.Row="2"
+                  x:Name="StopsDataGrid"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  HeadersVisibility="Column"
+                  RowBackground="#1A2432"
+                  AlternatingRowBackground="#16202B"
+                  GridLinesVisibility="None"
+                  Foreground="#EAF4FF"
+                  Background="#121B27"
+                  BorderBrush="#2E3E52"
+                  BorderThickness="1">
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="#2A3A4E" />
+                    <Setter Property="Foreground" Value="#EAF4FF" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="BorderBrush" Value="#3B4F67" />
+                    <Setter Property="BorderThickness" Value="0,0,0,1" />
+                    <Setter Property="Padding" Value="8,4" />
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Station" Binding="{Binding StationLabel}" Width="110" />
+                <DataGridTextColumn Header="Time" Binding="{Binding CapturedAtText}" Width="170" />
+                <DataGridTextColumn Header="PosErr(m)" Binding="{Binding PositionErrorMeters}" Width="90" />
+                <DataGridTextColumn Header="TimeErr(s)" Binding="{Binding TimeErrorSeconds}" Width="90" />
+                <DataGridTextColumn Header="PosScore" Binding="{Binding PositionScore}" Width="80" />
+                <DataGridTextColumn Header="TimeScore" Binding="{Binding TimeScore}" Width="80" />
+                <DataGridTemplateColumn Header="Final" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,2,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="48" />
+                                </Grid.ColumnDefinitions>
+                                <Border Background="#2B3A4E" Height="12" CornerRadius="6" VerticalAlignment="Center" />
+                                <Border Background="#1ED4A6"
+                                        Height="12"
+                                        CornerRadius="6"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Left"
+                                        Width="{Binding FinalScoreBarWidth}" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding FinalScore}"
+                                           Foreground="#B7FFEB"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</Window>

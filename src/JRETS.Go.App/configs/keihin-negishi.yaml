@@ -1,0 +1,387 @@
+line_info:
+  name_jp: 京浜東北・根岸線
+  name_en: Keihin Tohoku Negishi Line
+  line_color: "#00B2E5"
+  code: JK
+train_info:
+  - id: 727B
+    type: Local
+    terminal: 33241
+  - id: 1275A
+    type: Rapid
+    terminal: 33246
+stations:
+  - id: 33201
+    number: 47
+    name_jp: 大宮
+    name_en: Omiya
+    code: OMY
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33202
+    number: 46
+    name_jp: さいたま新都心
+    name_en: Saitama-Shintoshin
+    pa: 
+      727B: ["1.mp3"]
+      1275A: ["1.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33203
+    number: 45
+    name_jp: 与野
+    name_en: Yono
+    pa: 
+      727B: ["2.mp3"]
+      1275A: ["2.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33204
+    number: 44
+    name_jp: 北浦和
+    name_en: Kita-Urawa
+    pa: 
+      727B: ["3.mp3"]
+      1275A: ["3.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33205
+    number: 43
+    name_jp: 浦和
+    name_en: Urawa
+    code: URW
+    pa: 
+      727B: ["4.mp3"]
+      1275A: ["4.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33206
+    number: 42
+    name_jp: 南浦和
+    name_en: Minami-Urawa
+    pa: 
+      727B: ["5.mp3"]
+      1275A: ["5.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33207
+    number: 41
+    name_jp: 蕨
+    name_en: Warabi
+    pa: 
+      727B: ["6.mp3", "7.mp3"]
+      1275A: ["6.mp3", "7.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33208
+    number: 40
+    name_jp: 西川口
+    name_en: Nishi-Kawaguchi
+    pa: 
+      727B: ["8.mp3", "9.mp3"]
+      1275A: ["8.mp3", "9.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33209
+    number: 39
+    name_jp: 川口
+    name_en: Kawaguchi
+    pa: 
+      727B: ["10.mp3", "11.mp3"]
+      1275A: ["10.mp3", "11.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33210
+    number: 38
+    name_jp: 赤羽
+    name_en: Akabane
+    code: ABN
+    pa: 
+      727B: ["12.mp3", "13.mp3"]
+      1275A: ["12.mp3", "13.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33211
+    number: 37
+    name_jp: 東十条
+    name_en: Higashi-Jujo
+    pa: 
+      727B: ["14.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33212
+    number: 36
+    name_jp: 王子
+    name_en: Oji
+    pa: 
+      727B: ["15.mp3"]
+      1275A: ["15.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33213
+    number: 35
+    name_jp: 上中里
+    name_en: Kaminakazato
+    pa: 
+      727B: ["16.mp3"]
+      1275A: ["16.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33214
+    number: 34
+    name_jp: 田端
+    name_en: Tabata
+    code: TBT
+    pa: 
+      727B: ["17.mp3"]
+      1275A: ["17.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33215
+    number: 33
+    name_jp: 西日暮里
+    name_en: Nishi-Nippori
+    skip_train: ["1275A"]
+    pa:
+      727B: ["18.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33216
+    number: 32
+    name_jp: 日暮里
+    name_en: Nippori
+    code: NPR
+    skip_train: ["1275A"]
+    pa:
+      727B: ["19.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33217
+    number: 31
+    name_jp: 鶯谷
+    name_en: Uguisudani
+    skip_train: ["1275A"]
+    pa:
+      727B: ["20.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33218
+    number: 30
+    name_jp: 上野
+    name_en: Ueno
+    code: UEN
+    pa:
+      727B: ["21.mp3"]
+      1275A: ["18.mp3", "19.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33219
+    number: 29
+    name_jp: 御徒町
+    name_en: Okachimachi
+    skip_train: ["1275A"]
+    pa:
+      727B: ["23.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33220
+    number: 28
+    name_jp: 秋葉原
+    name_en: Akihabara
+    code: AKB
+    pa:
+      727B: ["24.mp3"]
+      1275A: ["20.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33221
+    number: 27
+    name_jp: 神田
+    name_en: Kanda
+    code: KND
+    pa:
+      727B: ["25.mp3"]
+      1275A: ["21.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33222
+    number: 26
+    name_jp: 東京
+    name_en: Tokyo
+    code: TYO
+    pa:
+      727B: ["26.mp3"]
+      1275A: ["22.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33223
+    number: 25
+    name_jp: 有楽町
+    name_en: Yurakucho
+    skip_train: ["1275A"]
+    pa:
+      727B: ["27.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33224
+    number: 24
+    name_jp: 新橋
+    name_en: Shimbashi
+    code: SMB
+    skip_train: ["1275A"]
+    pa:
+      727B: ["28.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33225
+    number: 23
+    name_jp: 浜松町
+    name_en: Hamamatsucho
+    code: HMC
+    pa:
+      727B: ["29.mp3"]
+      1275A: ["23.mp3", "24.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33226
+    number: 22
+    name_jp: 田町
+    name_en: Tamachi
+    pa:
+      727B: ["31.mp3"]
+      1275A: ["25.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33227
+    number: 20
+    name_jp: 品川
+    name_en: Shinagawa
+    code: SGW
+    pa:
+      727B: ["32.mp3"]
+      1275A: ["27.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33228
+    number: 19
+    name_jp: 大井町
+    name_en: Oimachi
+    pa:
+      727B: ["33.mp3", "34.mp3"]
+      1275A: ["28.mp3", "29.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33229
+    number: 18
+    name_jp: 大森
+    name_en: Omori
+    pa:
+      727B: ["35.mp3", "36.mp3"]
+      1275A: ["30.mp3", "31.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33230
+    number: 17
+    name_jp: 蒲田
+    name_en: Kamata
+    pa:
+      727B: ["37.mp3", "38.mp3"]
+      1275A: ["32.mp3", "33.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33231
+    number: 16
+    name_jp: 川崎
+    name_en: Kawasaki
+    code: KWS
+    pa:
+      727B: ["39.mp3", "40.mp3"]
+      1275A: ["34.mp3", "35.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33232
+    number: 15
+    name_jp: 鶴見
+    name_en: Tsurumi
+    pa:
+      727B: ["41.mp3", "42.mp3"]
+      1275A: ["36.mp3", "37.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33233
+    number: 14
+    name_jp: 新子安
+    name_en: Shin-Koyasu
+    pa:
+      727B: ["43.mp3", "44.mp3"]
+      1275A: ["38.mp3", "39.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33234
+    number: 13
+    name_jp: 東神奈川
+    name_en: Higashi-Kanagawa
+    pa:
+      727B: ["45.mp3", "46.mp3"]
+      1275A: ["40.mp3", "41.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33235
+    number: 12
+    name_jp: 横浜
+    name_en: Yokohama
+    code: YHM
+    pa:
+      727B: ["47.mp3"]
+      1275A: ["42.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33236
+    number: 11
+    name_jp: 桜木町
+    name_en: Sakuragicho
+    pa: 
+      727B: ["48.mp3"]
+      1275A: ["43.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33237
+    number: 10
+    name_jp: 関内
+    name_en: Kannai
+    pa: 
+      727B: ["49.mp3"]
+      1275A: ["44.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33238
+    number: 9
+    name_jp: 石川町
+    name_en: Ishikawacho
+    pa: 
+      727B: ["50.mp3"]
+      1275A: ["45.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33239
+    number: 8
+    name_jp: 山手
+    name_en: Yamate
+    pa: 
+      727B: ["51.mp3"]
+      1275A: ["46.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33240
+    number: 7
+    name_jp: 根岸
+    name_en: Negishi
+    pa: 
+      727B: ["52.mp3", "53.mp3"]
+      1275A: ["47.mp3", "48.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33241
+    number: 6
+    name_jp: 磯子
+    name_en: Isogo
+    melody: ["JRE-IKST-007-02.mp3"]
+    pa:
+      727B: ["54.mp3", "55.mp3"]
+      1275A: ["49.mp3", "50.mp3"]
+  - id: 33242
+    number: 5
+    name_jp: 新杉田
+    name_en: Shin-Sugita
+    pa:
+      1275A: ["51.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33243
+    number: 4
+    name_jp: 洋光台
+    name_en: Yokodai
+    pa:
+      1275A: ["52.mp3", "53.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33244
+    number: 3
+    name_jp: 港南台
+    name_en: Konandai
+    pa:
+      1275A: ["54.mp3", "55.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33245
+    number: 2
+    name_jp: 本郷台
+    name_en: Hongodai
+    pa:
+      1275A: ["56.mp3", "57.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
+  - id: 33246
+    number: 1
+    name_jp: 大船
+    name_en: Ofuna
+    code: OFN
+    pa:
+      1275A: ["58.mp3", "59.mp3"]
+    melody: ["JRE-IKST-007-02.mp3"]
