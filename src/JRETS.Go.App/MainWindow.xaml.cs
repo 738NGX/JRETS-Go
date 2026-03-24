@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private const double AnnouncementMaxGain = 6.0;
     private const double AnnouncementLimiterThreshold = 0.98;
     private const double AnnouncementSoftClipDrive = 1.8;
+    private const double MelodyPlaybackVolume = 0.7;
     private const int TimelineVisibleStationCount = 8;
     private const int TimelineVisibleTokenCount = TimelineVisibleStationCount * 2 - 1;
     private const double StationArrowWidth = 128;
@@ -57,6 +58,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _refreshTimer;
     private readonly ObservableCollection<UpcomingStationItem> _upcomingStations = [];
     private readonly MediaPlayer _announcementPlayer = new();
+    private readonly MediaPlayer _melodyPlaybackPlayer = new();
     private readonly ConcurrentDictionary<string, string> _announcementNormalizedPathCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<LineConfigurationOption> _lineConfigOptions = [];
     private readonly List<TrainServiceOption> _serviceOptions = [];
@@ -89,6 +91,11 @@ public partial class MainWindow : Window
     private TrainServiceOption? _selectedService;
     private ScoringConfiguration _scoringConfiguration = new();
     private readonly string _announcementTempDirectory = Path.Combine(Path.GetTempPath(), "JRETS.Go.App", "normalized-audio");
+
+    private int? _melodyCurrentStationId;
+    private List<string> _melodyCurrentOptions = [];
+    private int _melodySelectedIndex;
+    private bool _melodyIsPlaying;
 
     public MainWindow()
     {
@@ -138,6 +145,8 @@ public partial class MainWindow : Window
         };
         _refreshTimer.Tick += RefreshTimerOnTick;
         _refreshTimer.Start();
+
+        _melodyPlaybackPlayer.MediaEnded += MelodyPlaybackPlayerOnMediaEnded;
 
         UpdateDisplay();
 
@@ -251,6 +260,7 @@ public partial class MainWindow : Window
         _configReloadDebounceTimer.Stop();
         _configWatcher.Dispose();
         _announcementPlayer.Close();
+        _melodyPlaybackPlayer.Close();
         TryCleanupAnnouncementTempDirectory();
         _memoryDataSource?.Dispose();
     }
@@ -326,6 +336,186 @@ public partial class MainWindow : Window
         return nint.Zero;
     }
 
+    private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        HandleMelodyHotKeys(e);
+    }
+
+    private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        HandleMelodyHotKeys(e);
+    }
+
+    private void HandleMelodyHotKeys(System.Windows.Input.KeyEventArgs e)
+    {
+        if (MelodySelectionPanel.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        if (e.Key == System.Windows.Input.Key.F4)
+        {
+            ToggleMelodyPlayback();
+            e.Handled = true;
+        }
+        else if (e.Key == System.Windows.Input.Key.Tab)
+        {
+            var isShiftPressed = (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == System.Windows.Input.ModifierKeys.Shift;
+            if (isShiftPressed)
+            {
+                CycleMelodySelection(reverse: true);
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void OpenMelodySelectionPanel(StationInfo? station)
+    {
+        if (station is null)
+        {
+            return;
+        }
+
+        _melodyCurrentStationId = station.Id;
+        _melodyCurrentOptions = station.Melody is { Count: > 0 } ? new List<string>(station.Melody) : [];
+        _melodySelectedIndex = 0;
+        _melodyIsPlaying = false;
+
+        if (_melodyCurrentOptions.Count == 0)
+        {
+            return;
+        }
+
+        UpdateMelodyPanelDisplay();
+        MelodySelectionPanel.Visibility = Visibility.Visible;
+    }
+
+    private void CloseMelodySelectionPanel()
+    {
+        MelodySelectionPanel.Visibility = Visibility.Collapsed;
+        _melodyCurrentStationId = null;
+        _melodyCurrentOptions.Clear();
+        _melodySelectedIndex = 0;
+        StopMelodyPlayback();
+    }
+
+    private void CycleMelodySelection(bool reverse)
+    {
+        if (_melodyCurrentOptions.Count == 0)
+        {
+            return;
+        }
+
+        if (reverse)
+        {
+            _melodySelectedIndex = (_melodySelectedIndex - 1 + _melodyCurrentOptions.Count) % _melodyCurrentOptions.Count;
+        }
+        else
+        {
+            _melodySelectedIndex = (_melodySelectedIndex + 1) % _melodyCurrentOptions.Count;
+        }
+
+        StopMelodyPlayback();
+        UpdateMelodyPanelDisplay();
+    }
+
+    private void ToggleMelodyPlayback()
+    {
+        if (_melodyCurrentOptions.Count == 0)
+        {
+            return;
+        }
+
+        if (_melodyIsPlaying)
+        {
+            StopMelodyPlayback();
+        }
+        else
+        {
+            PlayMelodyFile(_melodyCurrentOptions[_melodySelectedIndex]);
+        }
+    }
+
+    private void PlayMelodyFile(string melodyFilename)
+    {
+        var rootPath = Path.Combine(AppContext.BaseDirectory, "audio", "melodies", melodyFilename);
+        var lineId = _lineConfiguration?.LineInfo.Id;
+        var lineScopedPath = string.IsNullOrWhiteSpace(lineId)
+            ? string.Empty
+            : Path.Combine(AppContext.BaseDirectory, "audio", "melodies", lineId, melodyFilename);
+
+        var audioPath = File.Exists(rootPath)
+            ? rootPath
+            : lineScopedPath;
+
+        if (string.IsNullOrWhiteSpace(audioPath) || !File.Exists(audioPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var normalizedPath = PrepareNormalizedAnnouncementAudio(audioPath);
+            _melodyPlaybackPlayer.Stop();
+            _melodyPlaybackPlayer.Open(new Uri(normalizedPath, UriKind.Absolute));
+            _melodyPlaybackPlayer.Volume = MelodyPlaybackVolume;
+            _melodyPlaybackPlayer.Position = TimeSpan.Zero;
+            _melodyPlaybackPlayer.Play();
+            _melodyIsPlaying = true;
+            UpdateMelodyPanelDisplay();
+        }
+        catch
+        {
+            // Silently fail if playback cannot start
+        }
+    }
+
+    private void StopMelodyPlayback()
+    {
+        _melodyPlaybackPlayer.Stop();
+        _melodyIsPlaying = false;
+        UpdateMelodyPanelDisplay();
+    }
+
+    private void MelodyPlaybackPlayerOnMediaEnded(object? sender, EventArgs e)
+    {
+        if (!_melodyIsPlaying)
+        {
+            return;
+        }
+
+        if (_melodyCurrentOptions.Count == 0)
+        {
+            _melodyIsPlaying = false;
+            UpdateMelodyPanelDisplay();
+            return;
+        }
+
+        try
+        {
+            _melodyPlaybackPlayer.Position = TimeSpan.Zero;
+            _melodyPlaybackPlayer.Play();
+        }
+        catch
+        {
+            _melodyIsPlaying = false;
+            UpdateMelodyPanelDisplay();
+        }
+    }
+
+    private void UpdateMelodyPanelDisplay()
+    {
+        if (_melodyCurrentOptions.Count == 0)
+        {
+            MelodyCurrentText.Text = "No melody";
+            return;
+        }
+
+        var current = _melodyCurrentOptions[_melodySelectedIndex];
+        var status = _melodyIsPlaying ? "▶ Playing" : "◻ Stopped";
+        MelodyCurrentText.Text = $"{status}: {current}";
+    }
+
     private void StartSession()
     {
         _sessionRunning = true;
@@ -361,6 +551,7 @@ public partial class MainWindow : Window
         ResetAnnouncementState(doorOpen: true);
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
+        CloseMelodySelectionPanel();
         UpdateDisplay();
     }
 
@@ -458,7 +649,7 @@ public partial class MainWindow : Window
 
         ErrorTextBlock.Text = string.IsNullOrWhiteSpace(_lastDataSourceError)
             ? string.Empty
-            : $"Error: {_lastDataSourceError}";
+            : $"Info: {_lastDataSourceError}";
 
         ToggleDebugModeButton.Content = _debugModeEnabled ? "Disable Debug Mode" : "Enable Debug Mode";
         DebugModeStateText.Text = _debugModeEnabled
@@ -952,12 +1143,28 @@ public partial class MainWindow : Window
         {
             _announcementTargetStationId = state.NextStation?.Id;
             _announcementDepartureStartDistanceMeters = _announcementPreviousDistanceMeters;
+            CloseMelodySelectionPanel();
         }
 
         if (doorOpenTransition)
         {
             _announcementTargetStationId = null;
             _announcementDepartureStartDistanceMeters = null;
+            OpenMelodySelectionPanel(state.CurrentStopStation);
+        }
+
+        // In debug mode, session often starts with doors already open; ensure panel is shown in that state too.
+        if (snapshot.DoorOpen && state.CurrentStopStation is not null)
+        {
+            var stationChanged = _melodyCurrentStationId != state.CurrentStopStation.Id;
+            if (MelodySelectionPanel.Visibility != Visibility.Visible || stationChanged)
+            {
+                OpenMelodySelectionPanel(state.CurrentStopStation);
+            }
+        }
+        else if (!snapshot.DoorOpen && MelodySelectionPanel.Visibility == Visibility.Visible)
+        {
+            CloseMelodySelectionPanel();
         }
 
         if (!snapshot.DoorOpen && _announcementTargetStationId is null && state.NextStation is not null)
