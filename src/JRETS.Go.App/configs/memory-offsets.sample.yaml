@@ -2,7 +2,7 @@ process_name: JREAST_TrainSimulator.exe
 module_name: JREAST_TrainSimulator.exe
 offsets:
   next_station_id: "0x112BE58"
-  door_state: "0x148F270"
+  door_state: "0x1552440"
   main_clock_seconds: "0x14CBB04"
   timetable_second: "0x15354DC"
   timetable_minute: "0x15354E0"

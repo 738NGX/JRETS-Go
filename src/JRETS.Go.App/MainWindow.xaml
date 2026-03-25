@@ -29,15 +29,16 @@
             Background="#E6162230"
             CornerRadius="0,0,4,0"
             Padding="0"
-            Margin="400,0,400,0"
+            Margin="0,0,360,0"
             ClipToBounds="True">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="500" />
-                    <ColumnDefinition Width="1200" />
+                    <ColumnDefinition Width="220" />
+                    <ColumnDefinition Width="380" />
+                    <ColumnDefinition Width="1380" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Padding="0">
+                <Border Grid.Column="1" Padding="0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -45,13 +46,13 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel Orientation="Horizontal" Grid.Row="0" VerticalAlignment="Top">
-                            <Border x:Name="ServiceTypeTagBorder" Background="{Binding Background, ElementName=LineColorPreview}" CornerRadius="0,0,4,0" Padding="12,4">
+                            <Border x:Name="ServiceTypeTagBorder" Background="{Binding Background, ElementName=LineColorPreview}" CornerRadius="0,0,6,6" Padding="12,4">
                                 <TextBlock x:Name="ServiceTypeTextBlock" Width="96" Foreground="White" TextAlignment="Center" FontSize="16" FontWeight="Bold" Text="各駅停車" />
                             </Border>
                             <TextBlock x:Name="DirectionTextBlock" Foreground="White" FontSize="24" FontWeight="Bold" Margin="18,0,0,0" />
                         </StackPanel>
 
-                        <Grid Grid.Row="1" Margin="0,8,0,0">
+                        <Grid Grid.Row="1" Height="85" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
@@ -68,7 +69,7 @@
                                        VerticalAlignment="Bottom"
                                        Margin="10,0,14,10" />
                             <Border x:Name="StationCodeBadgeOuterBorder" Grid.Column="1" Width="60" Height="80" CornerRadius="6" Background="Black" Margin="0,0,16,0">
-                                <Grid Margin="8">
+                                <Grid Margin="6">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
@@ -87,7 +88,7 @@
                                                 <TextBlock x:Name="LineCode"
                                                        Text="JK"
                                                        Foreground="Black"
-                                                       FontSize="14"
+                                                       FontSize="16"
                                                        FontWeight="Bold"
                                                        HorizontalAlignment="Center"
                                                        VerticalAlignment="Center" />
@@ -116,7 +117,7 @@
                     </Grid>
                 </Border>
 
-                <Border Grid.Column="1" Padding="8,10,8,8">
+                <Border Grid.Column="2" Padding="8,10,8,8" HorizontalAlignment="Center">
                     <ItemsControl x:Name="UpcomingStationsItemsControl">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>

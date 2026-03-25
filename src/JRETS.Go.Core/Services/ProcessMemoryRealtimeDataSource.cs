@@ -78,7 +78,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
         var o = _configuration.Offsets;
 
         var nextStationId = ReadInt32(o.NextStationId);
-        var doorState = ReadInt32(o.DoorState);
+        var doorState = ReadByte(o.DoorState);
         var mainClock = ReadInt32(o.MainClockSeconds);
         var timetableSec = ReadInt32(o.TimetableSecond);
         var timetableMin = ReadInt32(o.TimetableMinute);
@@ -104,6 +104,12 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
     {
         var bytes = ReadBytes(relativeOffset, 4);
         return BitConverter.ToInt32(bytes, 0);
+    }
+
+    private byte ReadByte(long relativeOffset)
+    {
+        var bytes = ReadBytes(relativeOffset, 1);
+        return bytes[0];
     }
 
     private double ReadDouble(long relativeOffset)

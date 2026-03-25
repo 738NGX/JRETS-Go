@@ -1090,12 +1090,6 @@ public partial class MainWindow : Window
             majorIndexById[majorStations[i].Id] = i;
         }
 
-        // Rule: if the train is exactly at a major station, do not advance yet.
-        if (state.CurrentStopStation is not null && majorIndexById.TryGetValue(state.CurrentStopStation.Id, out var currentMajorIndex))
-        {
-            return BuildMajorDirectionText(majorStations, currentMajorIndex);
-        }
-
         var allStations = _lineConfiguration.Stations;
         var allStationsList = allStations.ToList();
         if (allStations.Count == 0)
@@ -1103,38 +1097,47 @@ public partial class MainWindow : Window
             return "--";
         }
 
-        int searchStartIndex;
         if (state.CurrentStopStation is not null)
         {
+            // Stopped at a major station: keep progressed direction (do not revert).
+            if (majorIndexById.TryGetValue(state.CurrentStopStation.Id, out var currentMajorIndex))
+            {
+                var advancedMajorIndex = (currentMajorIndex + 1) % majorStations.Count;
+                return BuildMajorDirectionText(majorStations, advancedMajorIndex);
+            }
+
+            // Stopped at a non-major station: point to upcoming major pair.
             var currentIndex = allStationsList.FindIndex(x => x.Id == state.CurrentStopStation.Id);
             if (currentIndex < 0)
             {
                 return "--";
             }
 
-            // After departure, advance from the next station position.
-            searchStartIndex = (currentIndex + 1) % allStations.Count;
+            var searchStartIndex = (currentIndex + 1) % allStations.Count;
+            var nextMajorIndex = FindNextMajorIndexInTravelOrder(allStations, searchStartIndex, majorIndexById);
+            return nextMajorIndex < 0 ? "--" : BuildMajorDirectionText(majorStations, nextMajorIndex);
         }
-        else if (state.NextStation is not null)
+
+        if (state.NextStation is not null)
         {
-            searchStartIndex = allStationsList.FindIndex(x => x.Id == state.NextStation.Id);
+            // In transit: if next station is a major station, immediately advance one pair.
+            if (majorIndexById.TryGetValue(state.NextStation.Id, out var nextStationMajorIndex))
+            {
+                var advancedMajorIndex = (nextStationMajorIndex + 1) % majorStations.Count;
+                return BuildMajorDirectionText(majorStations, advancedMajorIndex);
+            }
+
+            var searchStartIndex = allStationsList.FindIndex(x => x.Id == state.NextStation.Id);
             if (searchStartIndex < 0)
             {
                 return "--";
             }
-        }
-        else
-        {
-            return "--";
+
+            var nextMajorIndex = FindNextMajorIndexInTravelOrder(allStations, searchStartIndex, majorIndexById);
+            return nextMajorIndex < 0 ? "--" : BuildMajorDirectionText(majorStations, nextMajorIndex);
         }
 
-        var nextMajorIndex = FindNextMajorIndexInTravelOrder(allStations, searchStartIndex, majorIndexById);
-        if (nextMajorIndex < 0)
-        {
-            return "--";
-        }
-
-        return BuildMajorDirectionText(majorStations, nextMajorIndex);
+        return "--";
     }
 
     private static int FindNextMajorIndexInTravelOrder(
