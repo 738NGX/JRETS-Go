@@ -32,15 +32,21 @@ public sealed class DriveReportExporter
         var filePath = Path.Combine(outputDirectory, fileName);
 
         var builder = new StringBuilder();
-        builder.AppendLine("station_id,station_name,captured_at,scheduled_arrival_time,actual_arrival_time,position_error_meters,time_error_seconds,position_score,time_score,final_score");
+        builder.AppendLine("station_id,station_name,captured_at,scheduled_arrival_time,actual_arrival_time,actual_departure_time,position_error_meters,time_error_seconds,position_score,time_score,final_score,is_scored_stop");
 
         foreach (var stop in report.Stops)
         {
             var stationName = stop.StationName.Replace("\"", "\"\"");
-            var scheduledArrival = FormatClock(stop.ScheduledArrivalSeconds);
-            var actualArrival = FormatClock(stop.ActualArrivalSeconds);
+            var scheduledArrival = stop.ScheduledArrivalSeconds.HasValue ? FormatClock(stop.ScheduledArrivalSeconds.Value) : string.Empty;
+            var actualArrival = stop.ActualArrivalSeconds.HasValue ? FormatClock(stop.ActualArrivalSeconds.Value) : string.Empty;
+            var actualDeparture = stop.ActualDepartureSeconds.HasValue ? FormatClock(stop.ActualDepartureSeconds.Value) : string.Empty;
+            var positionError = stop.PositionErrorMeters.HasValue ? stop.PositionErrorMeters.Value.ToString("+0.00;-0.00;0.00") : string.Empty;
+            var timeError = stop.TimeErrorSeconds.HasValue ? stop.TimeErrorSeconds.Value.ToString("+0;-0;0") : string.Empty;
+            var positionScore = stop.PositionScore.HasValue ? stop.PositionScore.Value.ToString("F1") : string.Empty;
+            var timeScore = stop.TimeScore.HasValue ? stop.TimeScore.Value.ToString("F1") : string.Empty;
+            var finalScore = stop.FinalScore.HasValue ? stop.FinalScore.Value.ToString("F1") : string.Empty;
             builder.AppendLine(
-                $"{stop.StationId},\"{stationName}\",{stop.CapturedAt:O},{scheduledArrival},{actualArrival},{stop.PositionErrorMeters:+0.00;-0.00;0.00},{stop.TimeErrorSeconds:+0;-0;0},{stop.PositionScore:F1},{stop.TimeScore:F1},{stop.FinalScore:F1}");
+                $"{stop.StationId},\"{stationName}\",{stop.CapturedAt:O},{scheduledArrival},{actualArrival},{actualDeparture},{positionError},{timeError},{positionScore},{timeScore},{finalScore},{stop.IsScoredStop}");
         }
 
         File.WriteAllText(filePath, builder.ToString());

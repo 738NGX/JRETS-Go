@@ -156,7 +156,7 @@ stations:
     code: UEN
     pa:
       727B: ["21.mp3"]
-      1275A: ["18.mp3", "19.mp3"]
+      1275A: ["18.mp3", {"19.mp3": 800}]
     melody: ["JRE-IKST-007-02.mp3"]
   - id: 33219
     number: 29
@@ -217,7 +217,7 @@ stations:
     code: HMC
     pa:
       727B: ["29.mp3"]
-      1275A: ["23.mp3", "24.mp3"]
+      1275A: ["23.mp3", {"24.mp3": 800}]
     melody: ["JRE-IKST-007-02.mp3"]
   - id: 33226
     number: 22

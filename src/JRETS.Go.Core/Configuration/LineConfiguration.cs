@@ -51,9 +51,16 @@ public sealed class StationInfo
 
     public string? Code { get; init; }
 
-    public Dictionary<string, List<string>> Pa { get; init; } = [];
+    public Dictionary<string, List<PaAnnouncementEntry>> Pa { get; init; } = [];
 
     public List<string> Melody { get; init; } = [];
 
     public List<string> SkipTrain { get; init; } = [];
+}
+
+public sealed class PaAnnouncementEntry
+{
+    public required string FileName { get; init; }
+
+    public double? TriggerDistanceMeters { get; init; }
 }

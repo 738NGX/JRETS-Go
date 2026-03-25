@@ -1,86 +1,207 @@
 <Window x:Class="JRETS.Go.App.ReportViewerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Drive Report"
+        Title="Drive Logs"
         WindowStartupLocation="CenterScreen"
         Background="#101820">
     <Viewbox Stretch="Uniform" StretchDirection="Both">
         <Grid Width="1280" Height="720" Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="420" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-        <TextBlock x:Name="HeaderTextBlock"
-                   Grid.Row="0"
-                   Foreground="#EAF4FF"
-                   FontSize="24"
-                   FontWeight="SemiBold" />
+            <Border Grid.Column="0"
+                    Background="#0F1A28"
+                    BorderBrush="#2E3E52"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
 
-        <TextBlock x:Name="MetaTextBlock"
-                   Grid.Row="1"
-                   Margin="0,8,0,12"
-                   Foreground="#9FB5CC"
-                   FontSize="13" />
+                    <TextBlock Text="Drive Logs"
+                               Foreground="#EAF4FF"
+                               FontSize="26"
+                               FontWeight="SemiBold" />
 
-        <DataGrid Grid.Row="2"
-                  x:Name="StopsDataGrid"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  HeadersVisibility="Column"
-                  RowBackground="#1A2432"
-                  AlternatingRowBackground="#16202B"
-                  GridLinesVisibility="None"
-                  Foreground="#EAF4FF"
-                  Background="#121B27"
-                  BorderBrush="#2E3E52"
-                  BorderThickness="1">
-            <DataGrid.ColumnHeaderStyle>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background" Value="#2A3A4E" />
-                    <Setter Property="Foreground" Value="#EAF4FF" />
-                    <Setter Property="FontWeight" Value="SemiBold" />
-                    <Setter Property="BorderBrush" Value="#3B4F67" />
-                    <Setter Property="BorderThickness" Value="0,0,0,1" />
-                    <Setter Property="Padding" Value="8,4" />
-                </Style>
-            </DataGrid.ColumnHeaderStyle>
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Station" Binding="{Binding StationLabel}" Width="110" />
-                <DataGridTextColumn Header="Captured" Binding="{Binding CapturedAtText}" Width="120" />
-                <DataGridTextColumn Header="Scheduled" Binding="{Binding ScheduledArrivalText}" Width="110" />
-                <DataGridTextColumn Header="Actual" Binding="{Binding ActualArrivalText}" Width="110" />
-                <DataGridTextColumn Header="PosErr(m)" Binding="{Binding PositionErrorMeters}" Width="90" />
-                <DataGridTextColumn Header="TimeErr(s)" Binding="{Binding TimeErrorSeconds}" Width="90" />
-                <DataGridTextColumn Header="PosScore" Binding="{Binding PositionScore}" Width="80" />
-                <DataGridTextColumn Header="TimeScore" Binding="{Binding TimeScore}" Width="80" />
-                <DataGridTemplateColumn Header="Final" Width="*">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,2,0,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="48" />
-                                </Grid.ColumnDefinitions>
-                                <Border Background="#2B3A4E" Height="12" CornerRadius="6" VerticalAlignment="Center" />
-                                <Border Background="#1ED4A6"
-                                        Height="12"
-                                        CornerRadius="6"
-                                        VerticalAlignment="Center"
-                                        HorizontalAlignment="Left"
-                                        Width="{Binding FinalScoreBarWidth}" />
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding FinalScore}"
-                                           Foreground="#B7FFEB"
-                                           HorizontalAlignment="Right"
-                                           VerticalAlignment="Center" />
-                            </Grid>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+                    <Border Grid.Row="1"
+                            Margin="0,12,0,12"
+                            Background="#132334"
+                            BorderBrush="#2A3A4E"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock x:Name="SummaryDistanceTextBlock" Foreground="#BFD4EA" FontSize="13" />
+                            <TextBlock x:Name="SummaryDurationTextBlock" Grid.Row="1" Margin="0,4,0,0" Foreground="#BFD4EA" FontSize="13" />
+                            <TextBlock x:Name="SummaryStopsTextBlock" Grid.Row="2" Margin="0,4,0,0" Foreground="#BFD4EA" FontSize="13" />
+                            <TextBlock x:Name="SummaryPositionErrorTextBlock" Grid.Row="3" Margin="0,4,0,0" Foreground="#BFD4EA" FontSize="13" />
+                            <TextBlock x:Name="SummaryTimeErrorTextBlock" Grid.Row="4" Margin="0,4,0,0" Foreground="#BFD4EA" FontSize="13" />
+                        </Grid>
+                    </Border>
+
+                    <ListBox x:Name="LogsListBox"
+                             Grid.Row="2"
+                             SelectionChanged="LogsListBoxSelectionChanged"
+                             Background="#0D1724"
+                             BorderBrush="#2A3A4E"
+                             BorderThickness="1"
+                             Foreground="#EAF4FF"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0,0,0,8" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Background" Value="#152433" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="#1E3A56" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="10"
+                                        BorderBrush="#2A3A4E"
+                                        BorderThickness="1"
+                                        Background="{Binding ItemBackground}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="84" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding DateText}" Foreground="#EAF4FF" FontSize="13" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding TrainAndTypeText}" Margin="0,2,0,0" Foreground="#BFD4EA" FontSize="12" />
+                                            <DockPanel Margin="0,6,0,0">
+                                                <Border Background="{Binding LineColorBrush}" CornerRadius="3" Padding="6,2">
+                                                    <TextBlock Text="{Binding LineBadgeText}" Foreground="White" FontSize="11" FontWeight="SemiBold" />
+                                                </Border>
+                                                <TextBlock Text="{Binding DirectionText}" Margin="8,2,0,0" Foreground="#D8E9FA" FontSize="12" />
+                                            </DockPanel>
+                                            <TextBlock Text="{Binding SegmentText}" Margin="0,6,0,0" Foreground="#9FB5CC" FontSize="12" TextWrapping="Wrap" />
+                                        </StackPanel>
+
+                                        <Border Grid.Column="1"
+                                                Margin="10,0,0,0"
+                                                Background="#102B42"
+                                                BorderBrush="#2C4F6B"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6"
+                                                VerticalAlignment="Top">
+                                            <StackPanel>
+                                                <TextBlock Text="Score"
+                                                           Foreground="#8FC3E8"
+                                                           FontSize="11"
+                                                           HorizontalAlignment="Center" />
+                                                <TextBlock Text="{Binding AverageScoreText}"
+                                                           Foreground="#EAF4FF"
+                                                           FontSize="16"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           Margin="0,2,0,0" />
+                                                <TextBlock Text="pt"
+                                                           Foreground="#8FC3E8"
+                                                           FontSize="11"
+                                                           HorizontalAlignment="Center" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <DockPanel Grid.Row="0">
+                    <TextBlock x:Name="HeaderTextBlock"
+                               Foreground="#EAF4FF"
+                               FontSize="24"
+                               FontWeight="SemiBold" />
+                    <Button x:Name="DeleteLogButton"
+                            DockPanel.Dock="Right"
+                            Width="110"
+                            Height="32"
+                            Margin="12,0,0,0"
+                            Click="DeleteSelectedLogClick"
+                            Background="#5B1E28"
+                            BorderBrush="#8E3242"
+                            BorderThickness="1"
+                            Foreground="#F8E8EB"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Content="删除当前日志" />
+                </DockPanel>
+
+                <TextBlock x:Name="MetaTextBlock"
+                           Grid.Row="1"
+                           Margin="0,8,0,8"
+                           Foreground="#9FB5CC"
+                           FontSize="13" />
+
+                <DataGrid Grid.Row="3"
+                          x:Name="StopsDataGrid"
+                          AutoGenerateColumns="False"
+                          CanUserSortColumns="False"
+                          IsReadOnly="True"
+                          HeadersVisibility="Column"
+                          RowBackground="#1A2432"
+                          AlternatingRowBackground="#16202B"
+                          GridLinesVisibility="None"
+                          Foreground="#EAF4FF"
+                          Background="#121B27"
+                          BorderBrush="#2E3E52"
+                          BorderThickness="1">
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#2A3A4E" />
+                            <Setter Property="Foreground" Value="#EAF4FF" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="BorderBrush" Value="#3B4F67" />
+                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            <Setter Property="Padding" Value="8,4" />
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Station" Binding="{Binding StationLabel}" Width="120" />
+                        <DataGridTextColumn Header="Captured" Binding="{Binding CapturedAtText}" Width="110" />
+                        <DataGridTextColumn Header="Scheduled" Binding="{Binding ScheduledArrivalText}" Width="100" />
+                        <DataGridTextColumn Header="Actual" Binding="{Binding ActualArrivalText}" Width="100" />
+                        <DataGridTextColumn Header="Depart" Binding="{Binding ActualDepartureText}" Width="100" />
+                        <DataGridTextColumn Header="PosErr(m)" Binding="{Binding PositionErrorMeters}" Width="90" />
+                        <DataGridTextColumn Header="TimeErr(s)" Binding="{Binding TimeErrorSeconds}" Width="90" />
+                        <DataGridTextColumn Header="Score(pt)" Binding="{Binding TotalScore}" Width="90" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
         </Grid>
     </Viewbox>
 </Window>

@@ -44,6 +44,44 @@ stations:
         }
     }
 
+        [Fact]
+        public void LoadFromFile_ParsesPaEntryWithCustomTriggerDistance()
+        {
+                var yamlPath = Path.GetTempFileName();
+
+                try
+                {
+                        File.WriteAllText(yamlPath, """
+line_info:
+    name_jp: Test Line
+    name_en: Test Line
+    line_color: "#123456"
+    code: TS
+stations:
+    - id: 1
+        number: 1
+        name_jp: A
+        name_en: A
+        pa:
+            1275A: ["18.mp3", {"19.mp3": 800}]
+""");
+
+                        var loader = new YamlLineConfigurationLoader();
+                        var result = loader.LoadFromFile(yamlPath);
+
+                        var pa = result.Stations[0].Pa["1275A"];
+                        Assert.Equal(2, pa.Count);
+                        Assert.Equal("18.mp3", pa[0].FileName);
+                        Assert.Null(pa[0].TriggerDistanceMeters);
+                        Assert.Equal("19.mp3", pa[1].FileName);
+                        Assert.Equal(800, pa[1].TriggerDistanceMeters);
+                }
+                finally
+                {
+                        File.Delete(yamlPath);
+                }
+        }
+
     [Fact]
     public void Resolve_WhenDoorOpen_ShowsCurrentStop()
     {
@@ -147,9 +185,9 @@ offsets:
 
         Assert.Equal(-0.3, result.PositionErrorMeters);
         Assert.Equal(5, result.TimeErrorSeconds);
-        Assert.Equal(40, result.PositionScore);
+        Assert.Equal(30, result.PositionScore);
         Assert.Equal(45, result.TimeScore);
-        Assert.Equal(85, result.FinalScore);
+        Assert.Equal(75, result.FinalScore);
     }
 
     [Fact]
@@ -304,9 +342,9 @@ scoring:
 
         Assert.Equal(2, withConfigResult.PositionErrorMeters);
         Assert.Equal(15, withConfigResult.TimeErrorSeconds);
-        Assert.Equal(20, withConfigResult.PositionScore);
+        Assert.Equal(10, withConfigResult.PositionScore);
         Assert.Equal(35, withConfigResult.TimeScore);
-        Assert.Equal(55, withConfigResult.FinalScore);
+        Assert.Equal(45, withConfigResult.FinalScore);
         Assert.Equal(defaultResult.FinalScore, withConfigResult.FinalScore);
     }
 

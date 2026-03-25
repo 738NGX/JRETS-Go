@@ -79,11 +79,13 @@ public sealed class StopScoringService
             CapturedAt = snapshot.CapturedAt,
             ScheduledArrivalSeconds = scheduledSeconds,
             ActualArrivalSeconds = snapshot.MainClockSeconds,
+            ActualDepartureSeconds = null,
             PositionErrorMeters = Math.Round(positionErrorSigned, 2),
             TimeErrorSeconds = timeErrorSigned,
             PositionScore = Math.Round(positionScore, 1),
             TimeScore = Math.Round(timeScore, 1),
-            FinalScore = finalScore
+            FinalScore = finalScore,
+            IsScoredStop = true
         };
     }
 
