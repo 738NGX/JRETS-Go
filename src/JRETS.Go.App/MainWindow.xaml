@@ -63,7 +63,7 @@
                                     VerticalAlignment="Bottom"
                                     Margin="0,0,0,10"/>
                                 <StackPanel Width="220" HorizontalAlignment="Center" VerticalAlignment="Center" Orientation="Horizontal">
-                                    <TextBlock x:Name="Score"
+                                    <TextBlock x:Name="ScoreTextBlock"
                                                Text="0"
                                                Width="120"
                                                Grid.Column="0"
@@ -72,8 +72,15 @@
                                                TextAlignment="Right"
                                                FontWeight="Bold"
                                                VerticalAlignment="Bottom"
-                                               Margin="0,0,0,0"/>
-                                    <TextBlock x:Name="TotalScore"
+                                               Margin="0,0,0,0"
+                                               RenderTransformOrigin="0.5,0.5">
+                                        <TextBlock.RenderTransform>
+                                            <ScaleTransform x:Name="ScoreTextScaleTransform"
+                                                            ScaleX="1"
+                                                            ScaleY="1"/>
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <TextBlock x:Name="TotalScoreTextBlock"
                                                Text="pt/100pt"
                                                Grid.Column="0"
                                                Foreground="#BBB"
@@ -247,6 +254,88 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </Border>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="1"
+                        x:Name="ApproachScorePanel"
+                        Width="560"
+                        Height="180"
+                        VerticalAlignment="Top"
+                        HorizontalAlignment="Center"
+                        Margin="0,40,0,0"
+                        Background="#E6162230"
+                        CornerRadius="12"
+                        Padding="16"
+                        Visibility="Collapsed"
+                        Opacity="0">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="ApproachScorePanelTransform"
+                                            Y="24"/>
+                    </Border.RenderTransform>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Stop Check"
+                                   Foreground="#D7DFE6"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,10"/>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal">
+                                <TextBlock x:Name="ApproachDistanceValueTextBlock"
+                                           Text="0"
+                                           Foreground="White"
+                                           FontSize="56"
+                                           FontWeight="Bold"
+                                           VerticalAlignment="Bottom"/>
+                                <TextBlock x:Name="ApproachDistanceUnitTextBlock"
+                                           Text="cm"
+                                           Foreground="#9CB3C7"
+                                           FontSize="24"
+                                           FontWeight="SemiBold"
+                                           Margin="8,0,0,10"
+                                           VerticalAlignment="Bottom"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="/"
+                                       Foreground="#7F909F"
+                                       FontSize="36"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+
+                            <StackPanel Grid.Column="2"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal">
+                                <TextBlock x:Name="ApproachTimeValueTextBlock"
+                                           Text="0"
+                                           Foreground="White"
+                                           FontSize="56"
+                                           FontWeight="Bold"
+                                           VerticalAlignment="Bottom"/>
+                                <TextBlock x:Name="ApproachTimeUnitTextBlock"
+                                           Text="s"
+                                           Foreground="#9CB3C7"
+                                           FontSize="24"
+                                           FontWeight="SemiBold"
+                                           Margin="8,0,0,10"
+                                           VerticalAlignment="Bottom"/>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
                 </Border>
 

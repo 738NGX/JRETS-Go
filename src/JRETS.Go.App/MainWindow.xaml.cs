@@ -3,6 +3,7 @@ using System.Linq;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Interop;
@@ -48,6 +49,10 @@ public partial class MainWindow : Window
     private const double MelodyPanelHiddenOffsetX = -340;
     private const double MelodyPanelVisibleOffsetX = 0;
     private static readonly Duration MelodyPanelAnimationDuration = TimeSpan.FromMilliseconds(220);
+    private const double ApproachPanelTriggerMeters = 400;
+    private const int ApproachSettlementStepOneDurationMs = 480;
+    private const int ApproachSettlementStepTwoDurationMs = 560;
+    private const int ScorePulseDurationMs = 520;
 
     private string _lineConfigPath;
     private readonly string _offsetsConfigPath;
@@ -94,6 +99,7 @@ public partial class MainWindow : Window
     private double? _activeApproachTargetStopDistance;
     private int? _activeApproachScheduledSeconds;
     private bool _activeApproachOvershootFaultTriggered;
+    private int? _activeApproachStationId;
     private DateTime _sessionStartedAt;
     private readonly List<StationStopScore> _stationScores = [];
     private int? _lastScoredStationId;
@@ -106,6 +112,14 @@ public partial class MainWindow : Window
     private int _melodySelectedIndex;
     private bool _melodyIsPlaying;
     private bool _isMelodySelectionPanelVisible;
+    private bool _isApproachPanelVisible;
+    private bool _isApproachSettlementAnimating;
+    private double _runningTotalScore;
+    private int _runningMaxScore = 0;
+    private DispatcherTimer? _approachValueAnimationTimer;
+    private DispatcherTimer? _approachRealtimeUpdateTimer;
+    private bool _scoreCapacityUpdatedForCurrentRun;
+    private bool _activeApproachDataLatched;
 
     public MainWindow()
     {
@@ -158,6 +172,8 @@ public partial class MainWindow : Window
         _refreshTimer.Start();
 
         _melodyPlaybackPlayer.MediaEnded += MelodyPlaybackPlayerOnMediaEnded;
+
+        ApplyScoreSummaryText();
 
         UpdateDisplay();
 
@@ -602,10 +618,16 @@ public partial class MainWindow : Window
         _timelineInitialized = false;
         _sessionStartedAt = DateTime.Now;
         _stationScores.Clear();
+        _runningTotalScore = 0;
+        _runningMaxScore = 0;
+        _scoreCapacityUpdatedForCurrentRun = false;
+        _activeApproachDataLatched = false;
         _lastScoredStationId = null;
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
         _activeApproachOvershootFaultTriggered = false;
+        StopApproachValueAnimation();
+        HideApproachPanel(immediate: true);
         _usingLiveMemory = TryActivateLiveMemoryMode();
         if (!_usingLiveMemory)
         {
@@ -615,6 +637,7 @@ public partial class MainWindow : Window
         var currentSnapshot = GetCurrentSnapshot();
         _previousDoorOpen = currentSnapshot.DoorOpen;
         ResetAnnouncementState(currentSnapshot.DoorOpen);
+        ApplyScoreSummaryText();
 
         UpdateDisplay();
     }
@@ -633,6 +656,9 @@ public partial class MainWindow : Window
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
         _activeApproachOvershootFaultTriggered = false;
+        StopApproachValueAnimation();
+        StopApproachRealtimeUpdateTimer();
+        HideApproachPanel(immediate: true);
         CloseMelodySelectionPanel();
         UpdateDisplay();
     }
@@ -728,6 +754,8 @@ public partial class MainWindow : Window
 
         RefreshUpcomingStations(snapshot, state);
         HandleAutoAnnouncements(snapshot, state);
+        ApplyScoreSummaryText();
+        EnsureApproachRealtimeUpdateTimerActive(snapshot, state);
 
         ErrorTextBlock.Text = string.IsNullOrWhiteSpace(_lastDataSourceError)
             ? string.Empty
@@ -766,15 +794,24 @@ public partial class MainWindow : Window
             // Latch next-stop targets at departure start and keep them until next stop scoring.
             _activeApproachTargetStopDistance = snapshot.TargetStopDistanceMeters;
             _activeApproachScheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
+            _activeApproachStationId = state.NextStation?.Id;
             _activeApproachOvershootFaultTriggered = false;
+            _activeApproachDataLatched = true;
+
+            if (!_scoreCapacityUpdatedForCurrentRun)
+            {
+                _runningMaxScore += 100;
+                _scoreCapacityUpdatedForCurrentRun = true;
+            }
         }
 
-        if (!snapshot.DoorOpen && (_activeApproachTargetStopDistance is null || _activeApproachScheduledSeconds is null))
+        if (!snapshot.DoorOpen && (_activeApproachTargetStopDistance is null || _activeApproachScheduledSeconds is null) && !_activeApproachDataLatched)
         {
-            // Fallback when session starts while already running between stations.
+            // Fallback when session starts while already running between stations (only once per session start).
             _activeApproachTargetStopDistance = snapshot.TargetStopDistanceMeters;
             _activeApproachScheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
             _activeApproachOvershootFaultTriggered = false;
+            _activeApproachDataLatched = true;
         }
 
         if (!snapshot.DoorOpen && _activeApproachTargetStopDistance is not null)
@@ -798,13 +835,25 @@ public partial class MainWindow : Window
             return;
         }
 
+            if (_activeApproachStationId.HasValue && _activeApproachStationId.Value != state.CurrentStopStation.Id)
+            {
+                // Prevent scoring if station ID mismatch (boundary condition where station changed between latch and door open)
+                return;
+            }
+
         var scoringSnapshot = BuildScoringSnapshot(snapshot);
         var stopScore = _stopScoringService.ScoreStop(state.CurrentStopStation, scoringSnapshot);
+        var totalBeforeStop = _runningTotalScore;
         _stationScores.Add(stopScore);
+        _runningTotalScore = Math.Round(_runningTotalScore + stopScore.FinalScore, 1);
         _lastScoredStationId = state.CurrentStopStation.Id;
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
         _activeApproachOvershootFaultTriggered = false;
+        _activeApproachDataLatched = false;
+        _scoreCapacityUpdatedForCurrentRun = false;
+
+        BeginStopSettlementAnimation(stopScore, totalBeforeStop, _runningTotalScore);
     }
 
     private RealtimeSnapshot BuildScoringSnapshot(RealtimeSnapshot currentSnapshot)
@@ -841,6 +890,332 @@ public partial class MainWindow : Window
         };
     }
 
+    private void ApplyScoreSummaryText()
+    {
+        ScoreTextBlock.Text = _runningTotalScore.ToString("0.#", CultureInfo.InvariantCulture);
+        TotalScoreTextBlock.Text = $"pt/{_runningMaxScore}pt";
+    }
+
+    private void UpdateApproachScorePanel(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        if (!_sessionRunning)
+        {
+            HideApproachPanel(immediate: true);
+            return;
+        }
+
+        if (_isApproachSettlementAnimating)
+        {
+            return;
+        }
+
+        if (snapshot.DoorOpen)
+        {
+            HideApproachPanel(immediate: false);
+            return;
+        }
+
+        if (state.NextStation is null)
+        {
+            HideApproachPanel(immediate: false);
+            return;
+        }
+
+        if (_activeApproachScheduledSeconds is null || _activeApproachTargetStopDistance is null)
+        {
+            HideApproachPanel(immediate: false);
+            return;
+        }
+
+        var remainingMeters = _activeApproachTargetStopDistance.Value - snapshot.CurrentDistanceMeters;
+        if (remainingMeters >= ApproachPanelTriggerMeters)
+        {
+            HideApproachPanel(immediate: false);
+            return;
+        }
+
+        var scheduledSeconds = _activeApproachScheduledSeconds.Value;
+        var timeErrorSigned = snapshot.MainClockSeconds - scheduledSeconds;
+        var distanceErrorSignedMeters = snapshot.CurrentDistanceMeters - _activeApproachTargetStopDistance.Value;
+
+        var distanceDisplay = BuildApproachDisplayValue(Math.Abs(distanceErrorSignedMeters) * 100, distanceErrorSignedMeters > 0);
+        var timeDisplay = BuildApproachDisplayValue(Math.Abs(timeErrorSigned), timeErrorSigned > 0);
+
+        SetApproachPanelValues(distanceDisplay, "cm", timeDisplay, "s");
+        ShowApproachPanel();
+    }
+
+    private static string BuildApproachDisplayValue(double magnitude, bool needsPlusSign)
+    {
+        var rounded = Math.Round(magnitude, 0);
+        var valueText = rounded.ToString("0", CultureInfo.InvariantCulture);
+        return needsPlusSign ? $"+{valueText}" : valueText;
+    }
+
+    private void SetApproachPanelValues(string distanceValueText, string distanceUnit, string timeValueText, string timeUnit)
+    {
+        ApproachDistanceValueTextBlock.Text = distanceValueText;
+        ApproachDistanceUnitTextBlock.Text = distanceUnit;
+        ApproachTimeValueTextBlock.Text = timeValueText;
+        ApproachTimeUnitTextBlock.Text = timeUnit;
+    }
+
+    private void ShowApproachPanel()
+    {
+        if (_isApproachPanelVisible && ApproachScorePanel.Visibility == Visibility.Visible)
+        {
+            return;
+        }
+
+        _isApproachPanelVisible = true;
+        ApproachScorePanel.Visibility = Visibility.Visible;
+
+        ApproachScorePanel.BeginAnimation(OpacityProperty, new DoubleAnimation
+        {
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(240),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        });
+
+        ApproachScorePanelTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation
+        {
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(240),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        });
+    }
+
+    private void HideApproachPanel(bool immediate)
+    {
+        if (!_isApproachPanelVisible && ApproachScorePanel.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        if (immediate)
+        {
+            _isApproachPanelVisible = false;
+            ApproachScorePanel.BeginAnimation(OpacityProperty, null);
+            ApproachScorePanelTransform.BeginAnimation(TranslateTransform.YProperty, null);
+            ApproachScorePanel.Opacity = 0;
+            ApproachScorePanelTransform.Y = 24;
+            ApproachScorePanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var fadeOut = new DoubleAnimation
+        {
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(210),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+        };
+        fadeOut.Completed += (_, _) =>
+        {
+            if (_isApproachSettlementAnimating)
+            {
+                return;
+            }
+
+            _isApproachPanelVisible = false;
+            ApproachScorePanel.Visibility = Visibility.Collapsed;
+            ApproachScorePanelTransform.Y = 24;
+        };
+
+        ApproachScorePanel.BeginAnimation(OpacityProperty, fadeOut);
+        ApproachScorePanelTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation
+        {
+            To = 20,
+            Duration = TimeSpan.FromMilliseconds(210),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+        });
+    }
+
+    private void StopApproachValueAnimation()
+    {
+        if (_approachValueAnimationTimer is null)
+        {
+            return;
+        }
+
+        _approachValueAnimationTimer.Stop();
+        _approachValueAnimationTimer = null;
+    }
+
+    private void StopApproachRealtimeUpdateTimer()
+    {
+        if (_approachRealtimeUpdateTimer is null)
+        {
+            return;
+        }
+
+        _approachRealtimeUpdateTimer.Stop();
+        _approachRealtimeUpdateTimer = null;
+    }
+
+    private void EnsureApproachRealtimeUpdateTimerActive(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        var shouldBeRunning = _sessionRunning
+            && !_isApproachSettlementAnimating
+            && !snapshot.DoorOpen
+            && state.NextStation is not null
+            && (snapshot.TargetStopDistanceMeters - snapshot.CurrentDistanceMeters) < ApproachPanelTriggerMeters;
+
+        if (shouldBeRunning && _approachRealtimeUpdateTimer is null)
+        {
+            _approachRealtimeUpdateTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(16)
+            };
+            _approachRealtimeUpdateTimer.Tick += (_, _) =>
+            {
+                var snap = GetCurrentSnapshot();
+                var st = _displayStateResolver.Resolve(_lineConfiguration, snap);
+                UpdateApproachScorePanel(snap, st);
+            };
+            _approachRealtimeUpdateTimer.Start();
+        }
+        else if (!shouldBeRunning && _approachRealtimeUpdateTimer is not null)
+        {
+            StopApproachRealtimeUpdateTimer();
+            if (!_isApproachSettlementAnimating)
+            {
+                HideApproachPanel(immediate: false);
+            }
+        }
+    }
+
+    private void BeginStopSettlementAnimation(StationStopScore stopScore, double totalBefore, double totalAfter)
+    {
+        StopApproachValueAnimation();
+        _isApproachSettlementAnimating = true;
+        ShowApproachPanel();
+
+        var startDistance = Math.Abs(stopScore.PositionErrorMeters) * 100;
+        var startTime = Math.Abs(stopScore.TimeErrorSeconds);
+        var distancePrefix = stopScore.PositionErrorMeters > 0 ? "+" : string.Empty;
+        var timePrefix = stopScore.TimeErrorSeconds > 0 ? "+" : string.Empty;
+
+        AnimateApproachValues(
+            startDistance,
+            0,
+            startTime,
+            0,
+            ApproachSettlementStepOneDurationMs,
+            distancePrefix,
+            timePrefix,
+            "cm",
+            "s",
+            () =>
+            {
+                SetApproachPanelValues("0", "pt", "0", "pt");
+
+                AnimateApproachValues(
+                    0,
+                    stopScore.PositionScore,
+                    0,
+                    stopScore.TimeScore,
+                    ApproachSettlementStepTwoDurationMs,
+                    string.Empty,
+                    string.Empty,
+                    "pt",
+                    "pt",
+                    () =>
+                    {
+                        AnimateScorePulseAndCountup(totalBefore, totalAfter, () =>
+                        {
+                            _isApproachSettlementAnimating = false;
+                            HideApproachPanel(immediate: false);
+                        });
+                    });
+            });
+    }
+
+    private void AnimateApproachValues(
+        double fromDistance,
+        double toDistance,
+        double fromTime,
+        double toTime,
+        int durationMs,
+        string distancePrefix,
+        string timePrefix,
+        string distanceUnit,
+        string timeUnit,
+        Action onCompleted)
+    {
+        StopApproachValueAnimation();
+
+        var startedAt = DateTime.UtcNow;
+        _approachValueAnimationTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+
+        _approachValueAnimationTimer.Tick += (_, _) =>
+        {
+            var elapsed = (DateTime.UtcNow - startedAt).TotalMilliseconds;
+            var progress = Math.Clamp(elapsed / durationMs, 0, 1);
+            var eased = 1 - Math.Pow(1 - progress, 3);
+
+            var distanceNow = fromDistance + (toDistance - fromDistance) * eased;
+            var timeNow = fromTime + (toTime - fromTime) * eased;
+
+            var distanceText = $"{distancePrefix}{Math.Round(distanceNow, 0).ToString("0", CultureInfo.InvariantCulture)}";
+            var timeText = $"{timePrefix}{Math.Round(timeNow, 0).ToString("0", CultureInfo.InvariantCulture)}";
+            SetApproachPanelValues(distanceText, distanceUnit, timeText, timeUnit);
+
+            if (progress < 1)
+            {
+                return;
+            }
+
+            StopApproachValueAnimation();
+            onCompleted();
+        };
+
+        _approachValueAnimationTimer.Start();
+    }
+
+    private void AnimateScorePulseAndCountup(double fromScore, double toScore, Action onCompleted)
+    {
+        var startedAt = DateTime.UtcNow;
+        var timer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+
+        var pulseAnimation = new DoubleAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromMilliseconds(ScorePulseDurationMs)
+        };
+        pulseAnimation.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(0))));
+        pulseAnimation.KeyFrames.Add(new EasingDoubleKeyFrame(1.22, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(180))));
+        pulseAnimation.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(ScorePulseDurationMs))));
+
+        ScoreTextScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, pulseAnimation);
+        ScoreTextScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, pulseAnimation);
+
+        timer.Tick += (_, _) =>
+        {
+            var elapsed = (DateTime.UtcNow - startedAt).TotalMilliseconds;
+            var progress = Math.Clamp(elapsed / ScorePulseDurationMs, 0, 1);
+            var eased = 1 - Math.Pow(1 - progress, 3);
+            var scoreNow = fromScore + (toScore - fromScore) * eased;
+            ScoreTextBlock.Text = scoreNow.ToString("0.#", CultureInfo.InvariantCulture);
+
+            if (progress < 1)
+            {
+                return;
+            }
+
+            timer.Stop();
+            ScoreTextBlock.Text = toScore.ToString("0.#", CultureInfo.InvariantCulture);
+            ApplyScoreSummaryText();
+            onCompleted();
+        };
+
+        timer.Start();
+    }
+
     private double GetTotalScore()
     {
         if (_stationScores.Count == 0)
@@ -848,7 +1223,7 @@ public partial class MainWindow : Window
             return 0;
         }
 
-        return Math.Round(_stationScores.Average(x => x.FinalScore), 1);
+        return Math.Round(_stationScores.Sum(x => x.FinalScore), 1);
     }
 
     private void ExportSessionReport()

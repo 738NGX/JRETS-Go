@@ -35,8 +35,8 @@ stations:
 
             Assert.Equal("TS", result.LineInfo.Code);
             Assert.Equal(2, result.Stations.Count);
-            Assert.Equal(1, result.Stations[0].Id);
-            Assert.Equal(2, result.Stations[1].Id);
+            Assert.Equal(2, result.Stations[0].Id);
+            Assert.Equal(1, result.Stations[1].Id);
         }
         finally
         {
@@ -119,7 +119,7 @@ offsets:
     }
 
     [Fact]
-    public void ScoreStop_ReturnsWeightedScore()
+    public void ScoreStop_UsesPositionAndTimeFiftyPointTables()
     {
         var station = new StationInfo
         {
@@ -138,16 +138,50 @@ offsets:
             TimetableHour = 1,
             TimetableMinute = 0,
             TimetableSecond = 0,
-            CurrentDistanceMeters = 999.5,
+            CurrentDistanceMeters = 999.7,
             TargetStopDistanceMeters = 1000
         };
 
         var service = new StopScoringService();
         var result = service.ScoreStop(station, snapshot);
 
-        Assert.Equal(-0.5, result.PositionErrorMeters);
+        Assert.Equal(-0.3, result.PositionErrorMeters);
         Assert.Equal(5, result.TimeErrorSeconds);
-        Assert.True(result.FinalScore > 90);
+        Assert.Equal(40, result.PositionScore);
+        Assert.Equal(45, result.TimeScore);
+        Assert.Equal(85, result.FinalScore);
+    }
+
+    [Fact]
+    public void ScoreStop_AtPerfectStop_GetsDoubleBonus()
+    {
+        var station = new StationInfo
+        {
+            Id = 11,
+            Number = 1,
+            NameJp = "P",
+            NameEn = "P"
+        };
+
+        var snapshot = new RealtimeSnapshot
+        {
+            CapturedAt = DateTime.Now,
+            NextStationId = 12,
+            DoorOpen = true,
+            MainClockSeconds = 3600,
+            TimetableHour = 1,
+            TimetableMinute = 0,
+            TimetableSecond = 0,
+            CurrentDistanceMeters = 1000,
+            TargetStopDistanceMeters = 1000
+        };
+
+        var service = new StopScoringService();
+        var result = service.ScoreStop(station, snapshot);
+
+        Assert.Equal(50, result.PositionScore);
+        Assert.Equal(50, result.TimeScore);
+        Assert.Equal(120, result.FinalScore);
     }
 
     [Fact]
@@ -231,7 +265,7 @@ scoring:
     }
 
     [Fact]
-    public void ScoreStop_UsesInjectedConfig()
+    public void ScoreStop_WithOrWithoutLegacyConfig_ProducesSameResult()
     {
         var station = new StationInfo
         {
@@ -246,11 +280,11 @@ scoring:
             CapturedAt = DateTime.Now,
             NextStationId = 2,
             DoorOpen = true,
-            MainClockSeconds = 1010,
+            MainClockSeconds = 1015,
             TimetableHour = 0,
             TimetableMinute = 16,
             TimetableSecond = 40,
-            CurrentDistanceMeters = 110,
+            CurrentDistanceMeters = 102,
             TargetStopDistanceMeters = 100
         };
 
@@ -263,12 +297,17 @@ scoring:
             MaxScorePerStop = 100
         };
 
-        var service = new StopScoringService(config);
-        var result = service.ScoreStop(station, snapshot);
+        var serviceWithConfig = new StopScoringService(config);
+        var serviceDefault = new StopScoringService();
+        var withConfigResult = serviceWithConfig.ScoreStop(station, snapshot);
+        var defaultResult = serviceDefault.ScoreStop(station, snapshot);
 
-        Assert.Equal(10, result.PositionErrorMeters);
-        Assert.Equal(10, result.TimeErrorSeconds);
-        Assert.Equal(91.5, result.FinalScore);
+        Assert.Equal(2, withConfigResult.PositionErrorMeters);
+        Assert.Equal(15, withConfigResult.TimeErrorSeconds);
+        Assert.Equal(20, withConfigResult.PositionScore);
+        Assert.Equal(35, withConfigResult.TimeScore);
+        Assert.Equal(55, withConfigResult.FinalScore);
+        Assert.Equal(defaultResult.FinalScore, withConfigResult.FinalScore);
     }
 
     [Fact]
@@ -299,7 +338,9 @@ scoring:
         var result = service.ScoreStop(station, snapshot);
 
         Assert.Equal(-10, result.TimeErrorSeconds);
-        Assert.True(result.TimeScore < 100);
+        Assert.Equal(50, result.PositionScore);
+        Assert.Equal(40, result.TimeScore);
+        Assert.Equal(100, result.FinalScore);
     }
 
     [Fact]

@@ -5,7 +5,37 @@ namespace JRETS.Go.Core.Services;
 
 public sealed class StopScoringService
 {
-    private readonly ScoringConfiguration _configuration;
+    private const double PerfectPositionToleranceCm = 0.0001;
+
+    private static readonly (double ErrorCm, double Score)[] PositionScoreTable =
+    [
+        (5, 50),
+        (10, 45),
+        (15, 40),
+        (25, 35),
+        (40, 30),
+        (60, 25),
+        (100, 20),
+        (150, 15),
+        (200, 10),
+        (300, 5),
+        (500, 0)
+    ];
+
+    private static readonly (double ErrorSeconds, double Score)[] TimeScoreTable =
+    [
+        (3, 50),
+        (6, 45),
+        (12, 40),
+        (18, 35),
+        (24, 30),
+        (36, 25),
+        (48, 20),
+        (60, 15),
+        (90, 10),
+        (120, 5),
+        (180, 0)
+    ];
 
     public StopScoringService()
         : this(new ScoringConfiguration())
@@ -14,7 +44,7 @@ public sealed class StopScoringService
 
     public StopScoringService(ScoringConfiguration configuration)
     {
-        _configuration = configuration;
+        _ = configuration;
     }
 
     public StationStopScore ScoreStop(StationInfo station, RealtimeSnapshot snapshot)
@@ -25,9 +55,22 @@ public sealed class StopScoringService
         var timeErrorSigned = snapshot.MainClockSeconds - scheduledSeconds;
         var timeError = Math.Abs(timeErrorSigned);
 
-        var positionScore = Math.Max(0, _configuration.MaxScorePerStop - positionError * _configuration.PositionPenaltyPerMeter);
-        var timeScore = Math.Max(0, _configuration.MaxScorePerStop - timeError * _configuration.TimePenaltyPerSecond);
-        var finalScore = Math.Round(positionScore * _configuration.PositionWeight + timeScore * _configuration.TimeWeight, 1);
+        var positionErrorCm = positionError * 100;
+        var positionScore = StepScoreFromTable(positionErrorCm, PositionScoreTable);
+        var timeScore = StepScoreFromTable(timeError, TimeScoreTable);
+        var perfectBonus = 0;
+
+        if (positionErrorCm <= PerfectPositionToleranceCm)
+        {
+            perfectBonus += 10;
+        }
+
+        if (timeError == 0)
+        {
+            perfectBonus += 10;
+        }
+
+        var finalScore = Math.Round(positionScore + timeScore + perfectBonus, 1);
 
         return new StationStopScore
         {
@@ -42,5 +85,21 @@ public sealed class StopScoringService
             TimeScore = Math.Round(timeScore, 1),
             FinalScore = finalScore
         };
+    }
+
+    private static double StepScoreFromTable(double errorValue, IReadOnlyList<(double ErrorThreshold, double Score)> table)
+    {
+        for (var i = 0; i < table.Count; i++)
+        {
+            var tier = table[i];
+            if (errorValue > tier.ErrorThreshold)
+            {
+                continue;
+            }
+
+            return tier.Score;
+        }
+
+        return table[^1].Score;
     }
 }
