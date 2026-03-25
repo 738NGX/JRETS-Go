@@ -14,245 +14,424 @@
         ShowInTaskbar="True"
         KeyDown="OnKeyDown"
         PreviewKeyDown="OnPreviewKeyDown">
-    <Viewbox Stretch="Uniform" StretchDirection="Both">
-        <Grid Width="2560" Height="1440">
+    <Viewbox Stretch="Uniform"
+            StretchDirection="Both">
+        <Grid Width="2560"
+                Height="1440">
             <Grid Margin="0,0,0,48">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="120" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="120"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-        <Border x:Name="LineColorPreview" Width="0" Height="0" Background="#00B2E5" Visibility="Collapsed" />
+                <Border x:Name="LineColorPreview"
+                        Width="0"
+                        Height="0"
+                        Background="#00B2E5"
+                        Visibility="Collapsed"/>
 
-        <Border Grid.Row="0"
-            Height="120"
-            Background="#E6162230"
-            CornerRadius="0,0,4,0"
-            Padding="0"
-            Margin="0,0,360,0"
-            ClipToBounds="True">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="220" />
-                    <ColumnDefinition Width="380" />
-                    <ColumnDefinition Width="1380" />
-                </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="1" Padding="0">
+                <Border Grid.Row="0"
+                        Height="120"
+                        Background="#E6162230"
+                        CornerRadius="0,0,4,0"
+                        Padding="0"
+                        Margin="0,0,360,0"
+                        ClipToBounds="True">
                     <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-
-                        <StackPanel Orientation="Horizontal" Grid.Row="0" VerticalAlignment="Top">
-                            <Border x:Name="ServiceTypeTagBorder" Background="{Binding Background, ElementName=LineColorPreview}" CornerRadius="0,0,6,6" Padding="12,4">
-                                <TextBlock x:Name="ServiceTypeTextBlock" Width="96" Foreground="White" TextAlignment="Center" FontSize="16" FontWeight="Bold" Text="各駅停車" />
-                            </Border>
-                            <TextBlock x:Name="DirectionTextBlock" Foreground="White" FontSize="24" FontWeight="Bold" Margin="18,0,0,0" />
-                        </StackPanel>
-
-                        <Grid Grid.Row="1" Height="85" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="NextStationStatusTextBlock"
-                                       Text="次は"
-                                       Grid.Column="0"
-                                       Foreground="White"
-                                       FontSize="32"
-                                       Width="128"
-                                       TextAlignment="Right"
-                                       FontWeight="Bold"
-                                       VerticalAlignment="Bottom"
-                                       Margin="10,0,14,10" />
-                            <Border x:Name="StationCodeBadgeOuterBorder" Grid.Column="1" Width="60" Height="80" CornerRadius="6" Background="Black" Margin="0,0,16,0">
-                                <Grid Margin="6">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="*" />
-                                    </Grid.RowDefinitions>
-                                    <TextBlock x:Name="StationCode"
-                                               Grid.Row="0"
-                                               Text="KWS"
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="480"/>
+                            <ColumnDefinition Width="1280"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0"
+                                Padding="0"
+                                BorderThickness="2"
+                                CornerRadius="6"
+                                BorderBrush="#BBB"
+                                Margin="10"
+                         >
+                            <StackPanel Orientation="Vertical"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Center">
+                                <TextBlock
+                                    Text="Driving Score"
+                                    Grid.Column="0"
+                                    Foreground="#BBB"
+                                    FontSize="24"
+                                    TextAlignment="Center"
+                                    FontWeight="Bold"
+                                    VerticalAlignment="Bottom"
+                                    Margin="0,0,0,10"/>
+                                <StackPanel Width="220" HorizontalAlignment="Center" VerticalAlignment="Center" Orientation="Horizontal">
+                                    <TextBlock x:Name="Score"
+                                               Text="0"
+                                               Width="120"
+                                               Grid.Column="0"
                                                Foreground="White"
-                                               FontSize="14"
+                                               FontSize="32"
+                                               TextAlignment="Right"
                                                FontWeight="Bold"
-                                               HorizontalAlignment="Center"
-                                               Margin="0,0,0,2" />
-                                    <Border Grid.Row="1" Background="{Binding Background, ElementName=LineColorPreview}" CornerRadius="4" Padding="4,4">
-                                        <Border Background="White" CornerRadius="4">
-                                            <StackPanel Orientation="Vertical">
-                                                <TextBlock x:Name="LineCode"
-                                                       Text="JK"
-                                                       Foreground="Black"
-                                                       FontSize="16"
-                                                       FontWeight="Bold"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center" />
-                                                <TextBlock x:Name="LineNumberBadgeTextBlock"
-                                                       Text="12"
-                                                       Foreground="Black"
-                                                       Margin="0,-2,0,0"
-                                                       FontSize="18"
-                                                       FontWeight="Bold"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Border>
+                                               VerticalAlignment="Bottom"
+                                               Margin="0,0,0,0"/>
+                                    <TextBlock x:Name="TotalScore"
+                                               Text="pt/100pt"
+                                               Grid.Column="0"
+                                               Foreground="#BBB"
+                                               FontSize="16"
+                                               Width="100"
+                                               TextAlignment="Left"
+                                               VerticalAlignment="Bottom"
+                                               Margin="0,0,0,5"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1"
+                                Padding="0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Orientation="Horizontal"
+                                        Grid.Row="0"
+                                        VerticalAlignment="Top">
+                                    <Border x:Name="ServiceTypeTagBorder"
+                                            Background="{Binding Background, ElementName=LineColorPreview}"
+                                            CornerRadius="0,0,6,6"
+                                            Padding="12,4">
+                                        <TextBlock x:Name="ServiceTypeTextBlock"
+                                                Width="96"
+                                                Foreground="White"
+                                                TextAlignment="Center"
+                                                FontSize="16"
+                                                FontWeight="Bold"
+                                                Text="各駅停車"/>
                                     </Border>
+                                    <TextBlock x:Name="DirectionTextBlock"
+                                            Foreground="White"
+                                            FontSize="24"
+                                            FontWeight="Bold"
+                                            Margin="18,0,0,0"/>
+                                </StackPanel>
+
+                                <Grid Grid.Row="1"
+                                        Height="85"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="NextStationStatusTextBlock"
+                                               Text="次は"
+                                               Grid.Column="0"
+                                               Foreground="White"
+                                               FontSize="32"
+                                               Width="128"
+                                               TextAlignment="Right"
+                                               FontWeight="Bold"
+                                               VerticalAlignment="Bottom"
+                                               Margin="10,0,14,10"/>
+                                    <Border x:Name="StationCodeBadgeOuterBorder"
+                                            Grid.Column="1"
+                                            Width="60"
+                                            Height="80"
+                                            CornerRadius="6"
+                                            Background="Black"
+                                            Margin="0,0,16,0">
+                                        <Grid Margin="6">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+                                            <TextBlock x:Name="StationCode"
+                                                       Grid.Row="0"
+                                                       Text="KWS"
+                                                       Foreground="White"
+                                                       FontSize="14"
+                                                       FontWeight="Bold"
+                                                       HorizontalAlignment="Center"
+                                                       Margin="0,0,0,2"/>
+                                            <Border Grid.Row="1"
+                                                    Background="{Binding Background, ElementName=LineColorPreview}"
+                                                    CornerRadius="4"
+                                                    Padding="4,4">
+                                                <Border Background="White"
+                                                        CornerRadius="4">
+                                                    <StackPanel Orientation="Vertical">
+                                                        <TextBlock x:Name="LineCode"
+                                                                   Text="JK"
+                                                                   Foreground="Black"
+                                                                   FontSize="16"
+                                                                   FontWeight="Bold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock x:Name="LineNumberBadgeTextBlock"
+                                                                   Text="12"
+                                                                   Foreground="Black"
+                                                                   Margin="0,-2,0,0"
+                                                                   FontSize="18"
+                                                                   FontWeight="Bold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock x:Name="NextStationNameTextBlock"
+                                               Grid.Column="2"
+                                               Foreground="White"
+                                               FontSize="32"
+                                               FontWeight="Bold"
+                                               VerticalAlignment="Bottom"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,10"/>
                                 </Grid>
-                            </Border>
-                            <TextBlock x:Name="NextStationNameTextBlock"
-                                       Grid.Column="2"
-                                       Foreground="White"
-                                       FontSize="32"
-                                       FontWeight="Bold"
-                                       VerticalAlignment="Bottom"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,10" />
-                        </Grid>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Column="2"
+                                Padding="8,10,8,8"
+                                HorizontalAlignment="Left">
+                            <ItemsControl x:Name="UpcomingStationsItemsControl">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Width="{Binding ArrowWidth}"
+                                                Margin="0,0,-5,10">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="32"/>
+                                            </Grid.RowDefinitions>
+                                            <StackPanel Grid.Row="0"
+                                                    VerticalAlignment="Bottom">
+                                                <TextBlock Text="{Binding NameLabel}"
+                                                           Foreground="White"
+                                                           FontSize="18"
+                                                           FontWeight="Bold"
+                                                           TextAlignment="Center"
+                                                           TextWrapping="Wrap"
+                                                           HorizontalAlignment="Center"/>
+                                                <TextBlock Text="{Binding CodeLabel}"
+                                                           Foreground="White"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"
+                                                           TextAlignment="Center"
+                                                           HorizontalAlignment="Center"
+                                                           Margin="0,0,0,0"/>
+                                            </StackPanel>
+                                            <Grid Grid.Row="1">
+                                                <Path Data="{Binding ArrowGeometry}"
+                                                      Fill="{Binding ArrowFill}"
+                                                      Stroke="#FFFFFFFF"
+                                                      StrokeThickness="1"/>
+                                                <Ellipse Width="24"
+                                                         Height="24"
+                                                         Fill="White"
+                                                         Stroke="#B0B0B0"
+                                                         StrokeThickness="1"
+                                                         HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"
+                                                         Visibility="{Binding StationMarkerVisibility}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
                     </Grid>
                 </Border>
 
-                <Border Grid.Column="2" Padding="8,10,8,8" HorizontalAlignment="Center">
-                    <ItemsControl x:Name="UpcomingStationsItemsControl">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Width="{Binding ArrowWidth}" Margin="0,0,-5,10">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="32" />
-                                    </Grid.RowDefinitions>
-                                    <StackPanel Grid.Row="0" VerticalAlignment="Bottom">
-                                        <TextBlock Text="{Binding NameLabel}"
-                                                   Foreground="White"
-                                                   FontSize="18"
-                                                   FontWeight="Bold"
-                                                   TextAlignment="Center"
-                                                   TextWrapping="Wrap"
-                                                   HorizontalAlignment="Center" />
-                                        <TextBlock Text="{Binding CodeLabel}"
-                                                   Foreground="White"
-                                                   FontSize="14"
-                                                   FontWeight="SemiBold"
-                                                   TextAlignment="Center"
-                                                   HorizontalAlignment="Center"
-                                                   Margin="0,0,0,0" />
-                                    </StackPanel>
-                                    <Grid Grid.Row="1">
-                                        <Path Data="{Binding ArrowGeometry}"
-                                              Fill="{Binding ArrowFill}"
-                                              Stroke="#FFFFFFFF"
-                                              StrokeThickness="1" />
-                                        <Ellipse Width="24"
-                                                 Height="24"
-                                                 Fill="White"
-                                                 Stroke="#B0B0B0"
-                                                 StrokeThickness="1"
-                                                 HorizontalAlignment="Center"
-                                                 VerticalAlignment="Center"
-                                                 Visibility="{Binding StationMarkerVisibility}" />
-                                    </Grid>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Border>
-            </Grid>
-        </Border>
-
-        <Border Grid.Row="1"
-                x:Name="MelodySelectionPanel"
-                Width="320"
-                VerticalAlignment="Bottom"
-                HorizontalAlignment="Left"
-                Margin="0,0,0,720"
-                Background="#E6162230"
-                CornerRadius="0,10,10,0"
-                Padding="14"
-                Visibility="Collapsed">
-            <StackPanel>
-                <TextBlock Text="Station Melody" Foreground="#EAF4FF" FontSize="16" FontWeight="SemiBold" />
-                <TextBlock x:Name="MelodyCurrentText" Foreground="#C5D4E4" FontSize="12" Margin="0,4,0,8" TextWrapping="Wrap" Text="No melody" />
-                <Border Background="#12283B" CornerRadius="6" Padding="6" Margin="0,0,0,8">
-                    <ItemsControl x:Name="MelodyOptionsItemsControl">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="{Binding Background}" CornerRadius="4" Padding="6,4" Margin="0,2,0,2">
-                                    <TextBlock Text="{Binding Label}"
-                                               Foreground="{Binding Foreground}"
-                                               FontWeight="{Binding FontWeight}"
-                                               TextWrapping="Wrap" />
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Border>
-                <TextBlock Foreground="#A7BDD4" FontSize="11" Margin="0,0,0,8">
-                    <Run Text="Shift+Tab: Change  |  F4: Play/Stop" />
-                </TextBlock>
-            </StackPanel>
-        </Border>
-
-        <Border Grid.Row="1"
-                x:Name="DebugPanel"
-                Width="320"
-                VerticalAlignment="Bottom"
-                HorizontalAlignment="Left"
-                Margin="0,0,0,0"
-                Background="#E6162230"
-                CornerRadius="0,10,10,0"
-                Padding="14">
-            <StackPanel>
-                <TextBlock Text="Control Panel" Foreground="#EAF4FF" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock Text="Line Config" Foreground="#C5D4E4" FontSize="12" Margin="0,0,0,3" />
-                <ComboBox x:Name="LineConfigComboBox" Height="20" Margin="0,0,0,8" SelectionChanged="LineConfigSelectionChanged" />
-
-                <TextBlock Text="Train Pattern" Foreground="#C5D4E4" FontSize="12" Margin="0,0,0,3" />
-                <ComboBox x:Name="ServiceTypeComboBox" Height="20" Margin="0,0,0,8" SelectionChanged="ServiceTypeSelectionChanged" />
-
-                <TextBlock x:Name="ErrorTextBlock" Foreground="#F7BF9A" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8" />
-
-                <WrapPanel Margin="0,0,0,8">
-                    <Button Content="Start (F9)" Click="StartSessionClick" Width="142" Height="32" Margin="0,0,8,0" />
-                    <Button Content="End (F10)" Click="EndSessionClick" Width="142" Height="32" Margin="0,0,0,0" />
-                </WrapPanel>
-
-                <Button Content="Toggle Click Through (F7)" Click="ToggleClickThroughClick" Height="34" Margin="0,0,0,8" />
-                <Button Content="Open Latest Report" Click="OpenLatestReportClick" Height="34" />
-                <Button x:Name="ToggleDebugModeButton" Content="Enable Debug Mode" Click="ToggleDebugModeClick" Height="34" Margin="0,8,0,0" />
-                <Button Content="Exit App" Click="ExitAppClick" Height="34" Margin="0,8,0,0" />
-
-                <Border x:Name="DebugActionsPanel" Background="#172636" CornerRadius="8" Padding="10" Margin="0,10,0,0">
+                <Border Grid.Row="1"
+                        x:Name="MelodySelectionPanel"
+                        Width="320"
+                        VerticalAlignment="Bottom"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,720"
+                        Background="#E6162230"
+                        CornerRadius="0,10,10,0"
+                        Padding="14"
+                        Visibility="Collapsed">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="MelodySelectionPanelTransform"
+                                X="-340"/>
+                    </Border.RenderTransform>
                     <StackPanel>
-                        <TextBlock Text="Debug Tools" Foreground="#EAF4FF" FontSize="13" FontWeight="SemiBold" />
-                        <TextBlock x:Name="DebugModeStateText" Text="Mode: Off" Foreground="#A7BDD4" FontSize="11" Margin="0,2,0,0" />
-                        <WrapPanel Margin="0,6,0,0">
-                            <Button Content="Advance" Click="DebugAdvanceClick" Width="280" Height="30" Margin="0,0,0,0" />
+                        <TextBlock Text="Station Melody"
+                                Foreground="#EAF4FF"
+                                FontSize="16"
+                                FontWeight="SemiBold"/>
+                        <TextBlock x:Name="MelodyCurrentText"
+                                Foreground="#C5D4E4"
+                                FontSize="12"
+                                Margin="0,4,0,8"
+                                TextWrapping="Wrap"
+                                Text="No melody"/>
+                        <Border Background="#12283B"
+                                CornerRadius="6"
+                                Padding="6"
+                                Margin="0,0,0,8">
+                            <ItemsControl x:Name="MelodyOptionsItemsControl">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{Binding Background}"
+                                                CornerRadius="4"
+                                                Padding="6,4"
+                                                Margin="0,2,0,2">
+                                            <TextBlock Text="{Binding Label}"
+                                                       Foreground="{Binding Foreground}"
+                                                       FontWeight="{Binding FontWeight}"
+                                                       TextWrapping="Wrap"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                        <TextBlock Foreground="#A7BDD4"
+                                FontSize="11"
+                                Margin="0,0,0,8">
+                    <Run Text="Shift+Tab: Change  |  F4: Play/Stop"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1"
+                        x:Name="DebugPanel"
+                        Width="320"
+                        VerticalAlignment="Bottom"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,0"
+                        Background="#E6162230"
+                        CornerRadius="0,10,10,0"
+                        Padding="14">
+                    <StackPanel>
+                        <TextBlock Text="Control Panel"
+                                Foreground="#EAF4FF"
+                                FontSize="18"
+                                FontWeight="SemiBold"/>
+                        <TextBlock Text="Line Config"
+                                Foreground="#C5D4E4"
+                                FontSize="12"
+                                Margin="0,0,0,3"/>
+                        <ComboBox x:Name="LineConfigComboBox"
+                                Height="20"
+                                Margin="0,0,0,8"
+                                SelectionChanged="LineConfigSelectionChanged"/>
+
+                        <TextBlock Text="Train Pattern"
+                                Foreground="#C5D4E4"
+                                FontSize="12"
+                                Margin="0,0,0,3"/>
+                        <ComboBox x:Name="ServiceTypeComboBox"
+                                Height="20"
+                                Margin="0,0,0,8"
+                                SelectionChanged="ServiceTypeSelectionChanged"/>
+
+                        <TextBlock x:Name="ErrorTextBlock"
+                                Foreground="#F7BF9A"
+                                FontSize="12"
+                                TextWrapping="Wrap"
+                                Margin="0,0,0,8"/>
+
+                        <WrapPanel Margin="0,0,0,8">
+                            <Button Content="Start (F9)"
+                                    Click="StartSessionClick"
+                                    Width="142"
+                                    Height="32"
+                                    Margin="0,0,8,0"/>
+                            <Button Content="End (F10)"
+                                    Click="EndSessionClick"
+                                    Width="142"
+                                    Height="32"
+                                    Margin="0,0,0,0"/>
                         </WrapPanel>
-                        <Border Background="#101C29" CornerRadius="6" Padding="8" Margin="0,8,0,0">
+
+                        <Button Content="Toggle Click Through (F7)"
+                                Click="ToggleClickThroughClick"
+                                Height="34"
+                                Margin="0,0,0,8"/>
+                        <Button Content="Open Latest Report"
+                                Click="OpenLatestReportClick"
+                                Height="34"/>
+                        <Button x:Name="ToggleDebugModeButton"
+                                Content="Enable Debug Mode"
+                                Click="ToggleDebugModeClick"
+                                Height="34"
+                                Margin="0,8,0,0"/>
+                        <Button Content="Exit App"
+                                Click="ExitAppClick"
+                                Height="34"
+                                Margin="0,8,0,0"/>
+
+                        <Border x:Name="DebugActionsPanel"
+                                Background="#172636"
+                                CornerRadius="8"
+                                Padding="10"
+                                Margin="0,10,0,0">
                             <StackPanel>
-                                <TextBlock Text="Memory Snapshot" Foreground="#EAF4FF" FontSize="12" FontWeight="SemiBold" />
-                                <TextBlock x:Name="MemNextStationText" Foreground="#C7D7E8" FontSize="11" Margin="0,4,0,0" />
-                                <TextBlock x:Name="MemDoorText" Foreground="#C7D7E8" FontSize="11" Margin="0,2,0,0" />
-                                <TextBlock x:Name="MemMainClockText" Foreground="#C7D7E8" FontSize="11" Margin="0,2,0,0" />
-                                <TextBlock x:Name="MemTimetableText" Foreground="#C7D7E8" FontSize="11" Margin="0,2,0,0" />
-                                <TextBlock x:Name="MemCurrentDistanceText" Foreground="#C7D7E8" FontSize="11" Margin="0,2,0,0" />
-                                <TextBlock x:Name="MemTargetDistanceText" Foreground="#C7D7E8" FontSize="11" Margin="0,2,0,0" />
+                                <TextBlock Text="Debug Tools"
+                                        Foreground="#EAF4FF"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"/>
+                                <TextBlock x:Name="DebugModeStateText"
+                                        Text="Mode: Off"
+                                        Foreground="#A7BDD4"
+                                        FontSize="11"
+                                        Margin="0,2,0,0"/>
+                                <WrapPanel Margin="0,6,0,0">
+                                    <Button Content="Advance"
+                                            Click="DebugAdvanceClick"
+                                            Width="280"
+                                            Height="30"
+                                            Margin="0,0,0,0"/>
+                                </WrapPanel>
+                                <Border Background="#101C29"
+                                        CornerRadius="6"
+                                        Padding="8"
+                                        Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Memory Snapshot"
+                                                Foreground="#EAF4FF"
+                                                FontSize="12"
+                                                FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="MemNextStationText"
+                                                Foreground="#C7D7E8"
+                                                FontSize="11"
+                                                Margin="0,4,0,0"/>
+                                        <TextBlock x:Name="MemDoorText"
+                                                Foreground="#C7D7E8"
+                                                FontSize="11"
+                                                Margin="0,2,0,0"/>
+                                        <TextBlock x:Name="MemMainClockText"
+                                                Foreground="#C7D7E8"
+                                                FontSize="11"
+                                                Margin="0,2,0,0"/>
+                                        <TextBlock x:Name="MemTimetableText"
+                                                Foreground="#C7D7E8"
+                                                FontSize="11"
+                                                Margin="0,2,0,0"/>
+                                        <TextBlock x:Name="MemCurrentDistanceText"
+                                                Foreground="#C7D7E8"
+                                                FontSize="11"
+                                                Margin="0,2,0,0"/>
+                                        <TextBlock x:Name="MemTargetDistanceText"
+                                                Foreground="#C7D7E8"
+                                                FontSize="11"
+                                                Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
                     </StackPanel>
                 </Border>
-            </StackPanel>
-        </Border>
             </Grid>
         </Grid>
     </Viewbox>

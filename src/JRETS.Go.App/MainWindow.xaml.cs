@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using System.Windows.Media.Animation;
 using JRETS.Go.App.Interop;
 using JRETS.Go.Core.Configuration;
 using JRETS.Go.Core.Runtime;
@@ -44,6 +45,9 @@ public partial class MainWindow : Window
     private const int HotKeyToggleClickThrough = 1003;
     private const int HotKeyMelodyTogglePlayback = 1004;
     private const int HotKeyMelodyCycleSelection = 1005;
+    private const double MelodyPanelHiddenOffsetX = -340;
+    private const double MelodyPanelVisibleOffsetX = 0;
+    private static readonly Duration MelodyPanelAnimationDuration = TimeSpan.FromMilliseconds(220);
 
     private string _lineConfigPath;
     private readonly string _offsetsConfigPath;
@@ -101,6 +105,7 @@ public partial class MainWindow : Window
     private List<string> _melodyCurrentOptions = [];
     private int _melodySelectedIndex;
     private bool _melodyIsPlaying;
+    private bool _isMelodySelectionPanelVisible;
 
     public MainWindow()
     {
@@ -340,7 +345,7 @@ public partial class MainWindow : Window
                 handled = true;
                 break;
             case HotKeyMelodyTogglePlayback:
-                if (MelodySelectionPanel.Visibility == Visibility.Visible)
+                if (_isMelodySelectionPanelVisible)
                 {
                     ToggleMelodyPlayback();
                 }
@@ -348,7 +353,7 @@ public partial class MainWindow : Window
                 handled = true;
                 break;
             case HotKeyMelodyCycleSelection:
-                if (MelodySelectionPanel.Visibility == Visibility.Visible)
+                if (_isMelodySelectionPanelVisible)
                 {
                     CycleMelodySelection(reverse: false);
                 }
@@ -388,16 +393,60 @@ public partial class MainWindow : Window
         }
 
         UpdateMelodyPanelDisplay();
-        MelodySelectionPanel.Visibility = Visibility.Visible;
+        AnimateMelodySelectionPanel(show: true);
     }
 
     private void CloseMelodySelectionPanel()
     {
-        MelodySelectionPanel.Visibility = Visibility.Collapsed;
+        AnimateMelodySelectionPanel(show: false);
         _melodyCurrentStationId = null;
         _melodyCurrentOptions.Clear();
         _melodySelectedIndex = 0;
         StopMelodyPlayback();
+    }
+
+    private void AnimateMelodySelectionPanel(bool show)
+    {
+        _isMelodySelectionPanelVisible = show;
+        MelodySelectionPanel.Visibility = Visibility.Visible;
+
+        MelodySelectionPanelTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        MelodySelectionPanel.BeginAnimation(OpacityProperty, null);
+
+        MelodySelectionPanelTransform.X = show ? MelodyPanelHiddenOffsetX : MelodyPanelVisibleOffsetX;
+        MelodySelectionPanel.Opacity = show ? 0 : 1;
+
+        var slideAnimation = new DoubleAnimation
+        {
+            From = MelodySelectionPanelTransform.X,
+            To = show ? MelodyPanelVisibleOffsetX : MelodyPanelHiddenOffsetX,
+            Duration = MelodyPanelAnimationDuration,
+            EasingFunction = new CubicEase
+            {
+                EasingMode = show ? EasingMode.EaseOut : EasingMode.EaseIn
+            }
+        };
+
+        var opacityAnimation = new DoubleAnimation
+        {
+            From = MelodySelectionPanel.Opacity,
+            To = show ? 1 : 0,
+            Duration = MelodyPanelAnimationDuration
+        };
+
+        if (!show)
+        {
+            opacityAnimation.Completed += (_, _) =>
+            {
+                if (!_isMelodySelectionPanelVisible)
+                {
+                    MelodySelectionPanel.Visibility = Visibility.Collapsed;
+                }
+            };
+        }
+
+        MelodySelectionPanelTransform.BeginAnimation(TranslateTransform.XProperty, slideAnimation);
+        MelodySelectionPanel.BeginAnimation(OpacityProperty, opacityAnimation);
     }
 
     private void CycleMelodySelection(bool reverse)
@@ -1323,12 +1372,12 @@ public partial class MainWindow : Window
         if (snapshot.DoorOpen && state.CurrentStopStation is not null)
         {
             var stationChanged = _melodyCurrentStationId != state.CurrentStopStation.Id;
-            if (MelodySelectionPanel.Visibility != Visibility.Visible || stationChanged)
+            if (!_isMelodySelectionPanelVisible || stationChanged)
             {
                 OpenMelodySelectionPanel(state.CurrentStopStation);
             }
         }
-        else if (!snapshot.DoorOpen && MelodySelectionPanel.Visibility == Visibility.Visible)
+        else if (!snapshot.DoorOpen && _isMelodySelectionPanelVisible)
         {
             CloseMelodySelectionPanel();
         }
