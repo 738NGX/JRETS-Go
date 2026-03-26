@@ -148,7 +148,7 @@ public partial class MainWindow : Window
     private string? _lastKnownStopStationName;
     private DispatcherTimer? _approachValueAnimationTimer;
     private DispatcherTimer? _approachRealtimeUpdateTimer;
-    private bool _scoreCapacityUpdatedForCurrentRun;
+    private DispatcherTimer? _scoreCountupTimer;
     private double? _smoothedApproachDistanceErrorMeters;
     private double? _smoothedApproachTimeErrorSeconds;
     private double? _displayApproachDistanceErrorMeters;
@@ -668,7 +668,6 @@ public partial class MainWindow : Window
         _stationScores.Clear();
         _runningTotalScore = 0;
         _runningMaxScore = 0;
-        _scoreCapacityUpdatedForCurrentRun = false;
         _lastScoredStationId = null;
         _lastDoorOpenTransitionAt = null;
         _activeApproachTargetStopDistance = null;
@@ -679,6 +678,7 @@ public partial class MainWindow : Window
         ResetApproachDisplaySmoothing();
         _isApproachPanelPinned = false;
         StopApproachValueAnimation();
+        StopScoreCountupAnimation();
         HideApproachPanel(immediate: true);
         _sessionTerminalStationId = _selectedService?.Train.Terminal;
         if (_sessionTerminalStationId.HasValue)
@@ -729,6 +729,8 @@ public partial class MainWindow : Window
         _sessionRunning = false;
         _usingLiveMemory = false;
         StopLiveMemorySampling();
+        _runningTotalScore = 0;
+        _runningMaxScore = 0;
         _lastDistanceSampleMeters = null;
         _lastKnownStopStationId = null;
         _lastKnownStopStationName = null;
@@ -744,6 +746,7 @@ public partial class MainWindow : Window
         ResetApproachDisplaySmoothing();
         _isApproachPanelPinned = false;
         StopApproachValueAnimation();
+        StopScoreCountupAnimation();
         StopApproachRealtimeUpdateTimer();
         HideApproachPanel(immediate: true);
         CloseMelodySelectionPanel();
@@ -996,11 +999,6 @@ public partial class MainWindow : Window
             _activeApproachOvershootFaultTriggered = false;
             ResetApproachDisplaySmoothing();
 
-            if (!_scoreCapacityUpdatedForCurrentRun)
-            {
-                _runningMaxScore += 100;
-                _scoreCapacityUpdatedForCurrentRun = true;
-            }
         }
 
         if (!snapshot.DoorOpen && _activeApproachTargetStopDistance is not null)
@@ -1041,6 +1039,7 @@ public partial class MainWindow : Window
         var scoringSnapshot = BuildScoringSnapshot(snapshot);
         var stopScore = _stopScoringService.ScoreStop(scoringStation, scoringSnapshot);
         var totalBeforeStop = _runningTotalScore;
+        _runningMaxScore += 100;
         _stationScores.Add(stopScore);
         _runningTotalScore = Math.Round(_runningTotalScore + (stopScore.FinalScore ?? 0), 1);
         _lastScoredStationId = scoringStation.Id;
@@ -1049,7 +1048,6 @@ public partial class MainWindow : Window
         _activeApproachOvershootFaultTriggered = false;
         ResetApproachDisplaySmoothing();
         _isApproachPanelPinned = false;
-        _scoreCapacityUpdatedForCurrentRun = false;
 
         BeginStopSettlementAnimation(stopScore, totalBeforeStop, _runningTotalScore);
 
@@ -1429,6 +1427,22 @@ public partial class MainWindow : Window
         _approachValueAnimationTimer = null;
     }
 
+    private void StopScoreCountupAnimation()
+    {
+        if (_scoreCountupTimer is null)
+        {
+            return;
+        }
+
+        _scoreCountupTimer.Stop();
+        _scoreCountupTimer = null;
+        _isScoreCountupAnimating = false;
+        ScoreTextScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        ScoreTextScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        ScoreTextScaleTransform.ScaleX = 1;
+        ScoreTextScaleTransform.ScaleY = 1;
+    }
+
     private void StopApproachRealtimeUpdateTimer()
     {
         if (_approachRealtimeUpdateTimer is null)
@@ -1575,9 +1589,10 @@ public partial class MainWindow : Window
 
     private void AnimateScorePulseAndCountup(double fromScore, double toScore, Action onCompleted)
     {
+        StopScoreCountupAnimation();
         _isScoreCountupAnimating = true;
         var startedAt = DateTime.UtcNow;
-        var timer = new DispatcherTimer
+        _scoreCountupTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(16)
         };
@@ -1593,7 +1608,7 @@ public partial class MainWindow : Window
         ScoreTextScaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, pulseAnimation);
         ScoreTextScaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, pulseAnimation);
 
-        timer.Tick += (_, _) =>
+        _scoreCountupTimer.Tick += (_, _) =>
         {
             var elapsed = (DateTime.UtcNow - startedAt).TotalMilliseconds;
             var progress = Math.Clamp(elapsed / ScorePulseDurationMs, 0, 1);
@@ -1606,14 +1621,13 @@ public partial class MainWindow : Window
                 return;
             }
 
-            timer.Stop();
+            StopScoreCountupAnimation();
             ScoreTextBlock.Text = toScore.ToString("0.#", CultureInfo.InvariantCulture);
-            _isScoreCountupAnimating = false;
             ApplyScoreSummaryText();
             onCompleted();
         };
 
-        timer.Start();
+        _scoreCountupTimer.Start();
     }
 
     private double GetTotalScore()
