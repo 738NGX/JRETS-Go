@@ -617,7 +617,7 @@ public partial class MainWindow : Window
 
         var selectedIndex = Math.Clamp(_melodySelectedIndex, 0, _melodyCurrentOptions.Count - 1);
         var current = _melodyCurrentOptions[selectedIndex];
-        var status = _melodyIsPlaying ? "▶ Playing" : "◻ Stopped";
+        var status = _melodyIsPlaying ? "▶ 再生中 / Playing" : "◻ 停止中 / Stopped";
         MelodyCurrentText.Text = $"{status}  ({selectedIndex + 1}/{_melodyCurrentOptions.Count})";
 
         _melodyOptionItems.Clear();

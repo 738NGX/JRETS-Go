@@ -25,7 +25,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Text="Drive Logs"
+                    <TextBlock Text="運転記録 / Drive Logs"
                                Foreground="#EAF4FF"
                                FontSize="26"
                                FontWeight="SemiBold" />
@@ -85,7 +85,7 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="84" />
+                                            <ColumnDefinition Width="90" />
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Column="0">
@@ -109,7 +109,7 @@
                                                 Padding="6"
                                                 VerticalAlignment="Top">
                                             <StackPanel>
-                                                <TextBlock Text="Score"
+                                                <TextBlock Text="スコア/Score"
                                                            Foreground="#8FC3E8"
                                                            FontSize="11"
                                                            HorizontalAlignment="Center" />
@@ -148,9 +148,10 @@
                                FontWeight="SemiBold" />
                     <Button x:Name="DeleteLogButton"
                             DockPanel.Dock="Right"
-                            Width="110"
+                            HorizontalAlignment="Right"
+                            Width="180"
                             Height="32"
-                            Margin="12,0,0,0"
+                            Margin="0,0,0,0"
                             Click="DeleteSelectedLogClick"
                             Background="#5B1E28"
                             BorderBrush="#8E3242"
@@ -158,7 +159,7 @@
                             Foreground="#F8E8EB"
                             FontSize="12"
                             FontWeight="SemiBold"
-                            Content="删除当前日志" />
+                            Content="ログを削除 / Delete Log" />
                 </DockPanel>
 
                 <TextBlock x:Name="MetaTextBlock"
@@ -191,14 +192,14 @@
                         </Style>
                     </DataGrid.ColumnHeaderStyle>
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Station" Binding="{Binding StationLabel}" Width="120" />
-                        <DataGridTextColumn Header="Captured" Binding="{Binding CapturedAtText}" Width="110" />
-                        <DataGridTextColumn Header="Scheduled" Binding="{Binding ScheduledArrivalText}" Width="100" />
-                        <DataGridTextColumn Header="Actual" Binding="{Binding ActualArrivalText}" Width="100" />
-                        <DataGridTextColumn Header="Depart" Binding="{Binding ActualDepartureText}" Width="100" />
-                        <DataGridTextColumn Header="PosErr(m)" Binding="{Binding PositionErrorMeters}" Width="90" />
-                        <DataGridTextColumn Header="TimeErr(s)" Binding="{Binding TimeErrorSeconds}" Width="90" />
-                        <DataGridTextColumn Header="Score(pt)" Binding="{Binding TotalScore}" Width="90" />
+                        <DataGridTextColumn Header="駅名/Station" Binding="{Binding StationLabel}" Width="120" />
+                        <DataGridTextColumn Header="記録/Captured" Binding="{Binding CapturedAtText}" Width="100" />
+                        <DataGridTextColumn Header="定/Scheduled" Binding="{Binding ScheduledArrivalText}" Width="100" />
+                        <DataGridTextColumn Header="着/Arrive" Binding="{Binding ActualArrivalText}" Width="100" />
+                        <DataGridTextColumn Header="発/Depart" Binding="{Binding ActualDepartureText}" Width="100" />
+                        <DataGridTextColumn Header="位置/PosErr" Binding="{Binding PositionErrorMeters}" Width="95" />
+                        <DataGridTextColumn Header="延着/TimeErr" Binding="{Binding TimeErrorSeconds}" Width="95" />
+                        <DataGridTextColumn Header="スコア/Score" Binding="{Binding TotalScore}" Width="95" />
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

@@ -59,8 +59,8 @@ public partial class ReportViewerWindow
         }
 
         var result = MessageBox.Show(
-            $"确认删除日志文件 {Path.GetFileName(selected.SourcePath)} ?",
-            "删除日志",
+            $"Delete Log File {Path.GetFileName(selected.SourcePath)} ?",
+            "Delete Log",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
 
@@ -96,7 +96,7 @@ public partial class ReportViewerWindow
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"删除失败: {ex.Message}", "删除日志", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Delete Failed: {ex.Message}", "Delete Log", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -118,19 +118,19 @@ public partial class ReportViewerWindow
             ? 0
             : allScoredStops.Average(x => Math.Abs(x.TimeErrorSeconds ?? 0));
 
-        SummaryDistanceTextBlock.Text = $"Total Driving Distance: {totalDistanceMeters / 1000:F1} km";
-        SummaryDurationTextBlock.Text = $"Total Driving Hours: {FormatDuration(totalDuration)}";
-        SummaryStopsTextBlock.Text = $"Station Stop Times: {totalStops}";
-        SummaryPositionErrorTextBlock.Text = $"Average Position Error: ±{avgPositionErrorCm:F1} cm";
-        SummaryTimeErrorTextBlock.Text = $"Average Time Error: ±{avgTimeErrorSeconds:F1} s";
+        SummaryDistanceTextBlock.Text = $"通算走行距離 / Total Driving Distance: {totalDistanceMeters / 1000:F1} km";
+        SummaryDurationTextBlock.Text = $"通算運転時間 / Total Driving Hours: {FormatDuration(totalDuration)}";
+        SummaryStopsTextBlock.Text = $"停車駅数 / Station Stop Times: {totalStops}";
+        SummaryPositionErrorTextBlock.Text = $"平均停車位置誤差 / Average Position Error: ±{avgPositionErrorCm:F1} cm";
+        SummaryTimeErrorTextBlock.Text = $"平均到着時刻誤差 / Average Time Error: ±{avgTimeErrorSeconds:F1} s";
     }
 
     private void ApplyDetail(DriveLogEntry entry)
     {
         var report = entry.Report;
-        HeaderTextBlock.Text = $"Total Score: {report.TotalScore:F1}";
+        HeaderTextBlock.Text = $"総合スコア / Total Score: {report.TotalScore:F1}pt";
         MetaTextBlock.Text =
-            $"Source: {report.DataSource}  |  Start: {report.StartedAt:yyyy-MM-dd HH:mm:ss}  |  End: {report.EndedAt:yyyy-MM-dd HH:mm:ss}  |  File: {Path.GetFileName(entry.SourcePath)}";
+            $"開始/Start: {report.StartedAt:yyyy-MM-dd HH:mm:ss}  |  終了/End: {report.EndedAt:yyyy-MM-dd HH:mm:ss}  |  ファイル/File: {Path.GetFileName(entry.SourcePath)}";
 
         StopsDataGrid.ItemsSource = report.Stops.Select(x => new StopRow
         {
@@ -139,16 +139,16 @@ public partial class ReportViewerWindow
             ScheduledArrivalText = FormatClockNullable(x.ScheduledArrivalSeconds),
             ActualArrivalText = FormatClockNullable(x.ActualArrivalSeconds),
             ActualDepartureText = FormatClockNullable(x.ActualDepartureSeconds),
-            PositionErrorMeters = x.PositionErrorMeters.HasValue ? x.PositionErrorMeters.Value.ToString("F2") : "--",
-            TimeErrorSeconds = x.TimeErrorSeconds.HasValue ? x.TimeErrorSeconds.Value.ToString("+0;-0;0") : "--",
-            TotalScore = x.FinalScore.HasValue ? x.FinalScore.Value.ToString("F1") : "--"
+            PositionErrorMeters = x.PositionErrorMeters.HasValue ? x.PositionErrorMeters.Value.ToString("F2") + "m" : "--",
+            TimeErrorSeconds = x.TimeErrorSeconds.HasValue ? x.TimeErrorSeconds.Value.ToString("+0;-0;0") + "s" : "--",
+            TotalScore = x.FinalScore.HasValue ? x.FinalScore.Value.ToString("F1") + "pt" : "--"
         }).ToArray();
     }
 
     private void ApplyEmptyDetail()
     {
-        HeaderTextBlock.Text = "Drive Logs";
-        MetaTextBlock.Text = "No report data.";
+        HeaderTextBlock.Text = "運転記録 / Drive Logs";
+        MetaTextBlock.Text = "表示するデータがありません / No Data";
         StopsDataGrid.ItemsSource = Array.Empty<StopRow>();
     }
 
