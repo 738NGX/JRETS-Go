@@ -98,6 +98,7 @@ stations:
     name_en: Higashi-Jujo
     pa: 
       727B: ["14.mp3"]
+      1275A: ["14.mp3"]
     melody: ["JRE-IKST-007-02.mp3"]
   - id: 33212
     number: 36

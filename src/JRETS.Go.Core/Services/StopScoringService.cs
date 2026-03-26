@@ -10,16 +10,16 @@ public sealed class StopScoringService
     private static readonly (double ErrorCm, double Score)[] PositionScoreTable =
     [
         (5, 50),
-        (10, 45),
-        (15, 40),
-        (25, 35),
-        (40, 30),
-        (60, 25),
-        (100, 20),
-        (150, 15),
-        (200, 10),
-        (300, 5),
-        (500, 0)
+        (15, 45),
+        (30, 40),
+        (60, 35),
+        (90, 30),
+        (120, 25),
+        (180, 20),
+        (240, 15),
+        (300, 10),
+        (360, 5),
+        (480, 0)
     ];
 
     private static readonly (double ErrorSeconds, double Score)[] TimeScoreTable =

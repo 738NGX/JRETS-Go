@@ -1,6 +1,0 @@
-scoring:
-  position_penalty_per_meter: 2.0
-  time_penalty_per_second: 1.0
-  position_weight: 0.6
-  time_weight: 0.4
-  max_score_per_stop: 100.0

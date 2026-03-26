@@ -2108,6 +2108,7 @@ public partial class MainWindow : Window
         {
             var isStation = tokenIndex % 2 == 0;
             var stationIndex = tokenIndex / 2;
+            var isFirstVisibleStation = isStation && stationIndex == _timelineWindowStart / 2;
             var station = stopStations[Math.Clamp(stationIndex, 0, stopStations.Count - 1)];
 
             var fill = tokenIndex < _timelineActiveToken
@@ -2121,7 +2122,7 @@ public partial class MainWindow : Window
                 NameLabel = isStation ? station.NameJp : string.Empty,
                 CodeLabel = isStation ? $"{_lineConfiguration.LineInfo.Code}-{station.Number:D2}" : string.Empty,
                 ArrowFill = fill,
-                ArrowGeometry = BuildArrowGeometry(tokenIndex == 0, isStation),
+                ArrowGeometry = BuildArrowGeometry(isFirstVisibleStation, isStation),
                 ArrowWidth = isStation ? StationArrowWidth : SegmentArrowWidth,
                 StationMarkerVisibility = isStation ? Visibility.Visible : Visibility.Collapsed
             });
@@ -2135,7 +2136,47 @@ public partial class MainWindow : Window
             return true;
         }
 
+        if (!IsWithinSelectedServiceRoute(station))
+        {
+            return false;
+        }
+
         return station.SkipTrain.All(x => !string.Equals(x, _selectedService.Train.Id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool IsWithinSelectedServiceRoute(StationInfo station)
+    {
+        if (_selectedService is null || _lineConfiguration.LineInfo.IsLoop)
+        {
+            return true;
+        }
+
+        var terminalIndex = GetStationIndexInConfiguredOrder(_selectedService.Train.Terminal);
+        if (terminalIndex < 0)
+        {
+            return true;
+        }
+
+        var stationIndex = GetStationIndexInConfiguredOrder(station.Id);
+        if (stationIndex < 0)
+        {
+            return false;
+        }
+
+        return stationIndex <= terminalIndex;
+    }
+
+    private int GetStationIndexInConfiguredOrder(int stationId)
+    {
+        for (var i = 0; i < _lineConfiguration.Stations.Count; i++)
+        {
+            if (_lineConfiguration.Stations[i].Id == stationId)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private void UpdateTimelineState(
@@ -2302,7 +2343,9 @@ public partial class MainWindow : Window
 
     private int? ResolveAnnouncementTargetStationId(TrainDisplayState state)
     {
-        var orderedStations = _lineConfiguration.Stations.ToList();
+        var orderedStations = _lineConfiguration.Stations
+            .Where(IsWithinSelectedServiceRoute)
+            .ToList();
         if (orderedStations.Count == 0)
         {
             return null;
