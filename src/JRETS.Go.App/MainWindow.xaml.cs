@@ -54,15 +54,19 @@ public partial class MainWindow : Window
     private const double ControlPanelHiddenOffsetX = -340;
     private const double ControlPanelVisibleOffsetX = 0;
     private static readonly Duration ControlPanelAnimationDuration = TimeSpan.FromMilliseconds(220);
-    private const double ApproachPanelTriggerMeters = 400;
-    private const double ApproachPanelHideTriggerMeters = 460;
+    private const double ApproachPanelTriggerMeters = 100;
+    private const double ApproachPanelHideTriggerMeters = 150;
     private const int ApproachSettlementStepOneDurationMs = 480;
     private const int ApproachSettlementStepTwoDurationMs = 560;
     private const int ScorePulseDurationMs = 520;
     private const int UiRefreshIntervalMs = 120;
     private const int StopCheckRealtimeRefreshIntervalMs = 16;
-    private const int LiveMemorySamplingIntervalMs = 16;
+    private const int LiveMemorySamplingApproachIntervalMs = 16;
+    private const int LiveMemorySamplingCruiseIntervalMs = 120;
+    private const int LiveMemorySamplingErrorBackoffIntervalMs = 240;
     private const int LiveMemorySnapshotStaleMs = 500;
+    private const int DepartureDoorCloseDebounceMs = 1200;
+    private const double LiveMemoryApproachSamplingTriggerMeters = ApproachPanelHideTriggerMeters;
     private const double ApproachDisplaySmoothingHz = 5;
     private const double ApproachDisplayMinAlpha = 0.04;
     private const double ApproachDisplayMaxAlpha = 0.22;
@@ -111,6 +115,7 @@ public partial class MainWindow : Window
     private double? _announcementDepartureStartDistanceMeters;
     private double _announcementPreviousDistanceMeters;
     private bool _previousDoorOpen;
+    private DateTime? _lastDoorOpenTransitionAt;
     private double? _activeApproachTargetStopDistance;
     private int? _activeApproachScheduledSeconds;
     private bool _activeApproachOvershootFaultTriggered;
@@ -128,6 +133,7 @@ public partial class MainWindow : Window
     private bool _melodyIsPlaying;
     private bool _isMelodySelectionPanelVisible;
     private bool _isControlPanelVisible = true;
+    private int? _sessionTerminalStationId;
     private bool _isApproachPanelVisible;
     private bool _isApproachPanelHideAnimating;
     private bool _isApproachPanelPinned;
@@ -664,6 +670,7 @@ public partial class MainWindow : Window
         _runningMaxScore = 0;
         _scoreCapacityUpdatedForCurrentRun = false;
         _lastScoredStationId = null;
+        _lastDoorOpenTransitionAt = null;
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
         _activeApproachOvershootFaultTriggered = false;
@@ -673,6 +680,11 @@ public partial class MainWindow : Window
         _isApproachPanelPinned = false;
         StopApproachValueAnimation();
         HideApproachPanel(immediate: true);
+        _sessionTerminalStationId = _selectedService?.Train.Terminal;
+        if (_sessionTerminalStationId.HasValue)
+        {
+            _sessionTerminalStationId = NormalizeStationIdForScoring(_sessionTerminalStationId.Value);
+        }
         _usingLiveMemory = TryActivateLiveMemoryMode();
         if (!_usingLiveMemory)
         {
@@ -689,19 +701,15 @@ public partial class MainWindow : Window
         _lastKnownStopStationId = currentState.CurrentStopStation?.Id;
         _lastKnownStopStationName = currentState.CurrentStopStation?.NameJp;
 
-        // Session starts while already running: latch next-station data once here and avoid
-        // any extra fallback reads around station-boundary transitions.
-        if (!currentSnapshot.DoorOpen)
-        {
-            _activeApproachTargetStopDistance = currentSnapshot.TargetStopDistanceMeters;
-            _activeApproachScheduledSeconds =
-                currentSnapshot.TimetableHour * 3600 + currentSnapshot.TimetableMinute * 60 + currentSnapshot.TimetableSecond;
-            _activeApproachStationId = ResolveAnnouncementTargetStationId(currentState);
-            _activeApproachOvershootFaultTriggered = false;
-        }
+        // Do NOT latch approach data here; wait for explicit door-close transition to capture next-station reference.
+        // This ensures we read the correct target distance at the exact moment of departure.
 
         _lastDistanceSampleMeters = currentSnapshot.CurrentDistanceMeters;
         _previousDoorOpen = currentSnapshot.DoorOpen;
+        if (_previousDoorOpen)
+        {
+            _lastDoorOpenTransitionAt = currentSnapshot.CapturedAt;
+        }
         ResetAnnouncementState(currentSnapshot.DoorOpen);
         ApplyScoreSummaryText();
 
@@ -724,7 +732,9 @@ public partial class MainWindow : Window
         _lastDistanceSampleMeters = null;
         _lastKnownStopStationId = null;
         _lastKnownStopStationName = null;
+        _lastDoorOpenTransitionAt = null;
         _timelineInitialized = false;
+        _sessionTerminalStationId = null;
         ResetAnnouncementState(doorOpen: true);
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
@@ -859,9 +869,9 @@ public partial class MainWindow : Window
         {
             // Check remaining distance to next stopping station
             var remainingDistance = snapshot.TargetStopDistanceMeters - snapshot.CurrentDistanceMeters;
-            if (remainingDistance < 400)
+            if (remainingDistance < 100)
             {
-                // まもなく (approaching next stop - less than 400m away)
+                // まもなく (approaching next stop - less than 100m away)
                 displayStation = nextStoppingStation;
                 statusText = "まもなく";
             }
@@ -955,15 +965,34 @@ public partial class MainWindow : Window
         var doorOpenTransition = !_previousDoorOpen && snapshot.DoorOpen;
         var doorCloseTransition = _previousDoorOpen && !snapshot.DoorOpen;
 
-        if (doorCloseTransition)
+        if (doorOpenTransition)
+        {
+            _lastDoorOpenTransitionAt = snapshot.CapturedAt;
+        }
+
+        var ignoreCloseAsGlitch = false;
+        if (doorCloseTransition && _lastDoorOpenTransitionAt is DateTime lastDoorOpenAt)
+        {
+            var elapsedMs = (snapshot.CapturedAt - lastDoorOpenAt).TotalMilliseconds;
+            if (elapsedMs >= 0 && elapsedMs < DepartureDoorCloseDebounceMs)
+            {
+                ignoreCloseAsGlitch = true;
+            }
+        }
+
+        if (doorCloseTransition && !ignoreCloseAsGlitch)
         {
             CaptureStationDeparture(snapshot, state);
             _isApproachPanelPinned = false;
 
             // Latch next-stop targets at departure start and keep them until next stop scoring.
+            // At departure time: TargetStopDistanceMeters and TimetableXXX already point to the next stopping station.
+            // Resolve the departure station from stable tracked state, then derive the next stop.
+            // At door-close tick, state.CurrentStopStation can already be null.
+            var departureStationId = state.CurrentStopStation?.Id ?? _lastKnownStopStationId;
             _activeApproachTargetStopDistance = snapshot.TargetStopDistanceMeters;
             _activeApproachScheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
-            _activeApproachStationId = ResolveAnnouncementTargetStationId(state);
+            _activeApproachStationId = ResolveNextStoppingStationFromCurrentId(departureStationId);
             _activeApproachOvershootFaultTriggered = false;
             ResetApproachDisplaySmoothing();
 
@@ -985,14 +1014,21 @@ public partial class MainWindow : Window
 
         _previousDoorOpen = snapshot.DoorOpen;
 
-        StationInfo? scoringStation = state.CurrentStopStation;
-        if (_activeApproachStationId.HasValue
-            && (scoringStation is null || scoringStation.Id != _activeApproachStationId.Value))
-        {
-            scoringStation = _lineConfiguration.Stations.FirstOrDefault(x => x.Id == _activeApproachStationId.Value);
-        }
+        // Scoring station must come from latched departure-time reference data.
+        // This avoids scoring against transient/incorrect live station IDs at door-open transitions.
+        var normalizedApproachStationId = _activeApproachStationId.HasValue
+            ? NormalizeStationIdForScoring(_activeApproachStationId.Value)
+            : (int?)null;
+        StationInfo? scoringStation = normalizedApproachStationId.HasValue
+            ? _lineConfiguration.Stations.FirstOrDefault(x => x.Id == normalizedApproachStationId.Value)
+            : null;
 
         if (!doorOpenTransition || scoringStation is null)
+        {
+            return;
+        }
+
+        if (_activeApproachTargetStopDistance is null || _activeApproachScheduledSeconds is null)
         {
             return;
         }
@@ -1016,6 +1052,13 @@ public partial class MainWindow : Window
         _scoreCapacityUpdatedForCurrentRun = false;
 
         BeginStopSettlementAnimation(stopScore, totalBeforeStop, _runningTotalScore);
+
+        // Auto-end session when reaching terminal station
+        if (_sessionTerminalStationId.HasValue
+            && NormalizeStationIdForScoring(scoringStation.Id) == _sessionTerminalStationId.Value)
+        {
+            EndSession();
+        }
     }
 
     private void CaptureStationDeparture(RealtimeSnapshot snapshot, TrainDisplayState state)
@@ -1416,6 +1459,12 @@ public partial class MainWindow : Window
             };
             _approachRealtimeUpdateTimer.Tick += (_, _) =>
             {
+                if (_sessionRunning && _usingLiveMemory && TryGetLatestLiveMemorySnapshot(out var liveSnapshot))
+                {
+                    _latestApproachSnapshot = liveSnapshot;
+                    _latestApproachState = _displayStateResolver.Resolve(_lineConfiguration, liveSnapshot);
+                }
+
                 if (_latestApproachSnapshot is null || _latestApproachState is null)
                 {
                     return;
@@ -1713,10 +1762,13 @@ public partial class MainWindow : Window
         {
             while (!token.IsCancellationRequested)
             {
+                var delayMs = LiveMemorySamplingCruiseIntervalMs;
+
                 try
                 {
                     var snapshot = _memoryDataSource.GetSnapshot();
                     SetLatestLiveMemorySnapshot(snapshot);
+                    delayMs = _sessionRunning ? GetLiveMemorySamplingDelayMs(snapshot) : LiveMemorySamplingCruiseIntervalMs;
                 }
                 catch (OperationCanceledException)
                 {
@@ -1728,11 +1780,13 @@ public partial class MainWindow : Window
                     {
                         _liveMemorySamplingLastError = ex.Message;
                     }
+
+                    delayMs = LiveMemorySamplingErrorBackoffIntervalMs;
                 }
 
                 try
                 {
-                    await Task.Delay(LiveMemorySamplingIntervalMs, token).ConfigureAwait(false);
+                    await Task.Delay(delayMs, token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -1740,6 +1794,26 @@ public partial class MainWindow : Window
                 }
             }
         }, token);
+    }
+
+    private int GetLiveMemorySamplingDelayMs(RealtimeSnapshot snapshot)
+    {
+        if (snapshot.DoorOpen)
+        {
+            return LiveMemorySamplingCruiseIntervalMs;
+        }
+
+        // Only enter high-frequency sampling when approach data has been latched at door-close transition.
+        // Never use dynamic snapshot data for this decision.
+        if (_activeApproachTargetStopDistance is null)
+        {
+            return LiveMemorySamplingCruiseIntervalMs;
+        }
+
+        var remainingMeters = _activeApproachTargetStopDistance.Value - snapshot.CurrentDistanceMeters;
+        return remainingMeters <= LiveMemoryApproachSamplingTriggerMeters
+            ? LiveMemorySamplingApproachIntervalMs
+            : LiveMemorySamplingCruiseIntervalMs;
     }
 
     private void StopLiveMemorySampling()
@@ -2368,7 +2442,7 @@ public partial class MainWindow : Window
         {
             if (IsStopForSelectedService(orderedStations[i]))
             {
-                return orderedStations[i].Id;
+                return NormalizeStationIdForScoring(orderedStations[i].Id);
             }
         }
 
@@ -2381,11 +2455,97 @@ public partial class MainWindow : Window
         {
             if (IsStopForSelectedService(orderedStations[i]))
             {
-                return orderedStations[i].Id;
+                return NormalizeStationIdForScoring(orderedStations[i].Id);
             }
         }
 
         return null;
+    }
+
+    private int NormalizeStationIdForScoring(int stationId)
+    {
+        var stations = _lineConfiguration.Stations;
+        var station = stations.FirstOrDefault(s => s.Id == stationId);
+        if (station is null)
+        {
+            return stationId;
+        }
+
+        // Loop lines can contain duplicate physical stations with different IDs at seam boundaries.
+        // Normalize to the first configured occurrence to keep scoring/terminal checks consistent.
+        for (var i = 0; i < stations.Count; i++)
+        {
+            var candidate = stations[i];
+            if (!string.Equals(candidate.NameJp, station.NameJp, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (candidate.Number != station.Number)
+            {
+                continue;
+            }
+
+            var candidateCode = candidate.Code ?? string.Empty;
+            var stationCode = station.Code ?? string.Empty;
+            if (!string.Equals(candidateCode, stationCode, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return candidate.Id;
+        }
+
+        return stationId;
+    }
+
+    private int? ResolveNextStoppingStationFromCurrent(StationInfo? currentStation)
+    {
+        if (currentStation is null)
+        {
+            return null;
+        }
+
+        var allStations = _lineConfiguration.Stations.ToList();
+        var currentIndex = allStations.FindIndex(s => s.Id == currentStation.Id);
+        if (currentIndex < 0)
+        {
+            return null;
+        }
+
+        // Find the next stopping station after current station
+        for (var i = currentIndex + 1; i < allStations.Count; i++)
+        {
+            if (IsStopForSelectedService(allStations[i]))
+            {
+                return NormalizeStationIdForScoring(allStations[i].Id);
+            }
+        }
+
+        // For loop lines, wrap around
+        if (_lineConfiguration.LineInfo.IsLoop)
+        {
+            for (var i = 0; i < currentIndex; i++)
+            {
+                if (IsStopForSelectedService(allStations[i]))
+                {
+                    return NormalizeStationIdForScoring(allStations[i].Id);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private int? ResolveNextStoppingStationFromCurrentId(int? currentStationId)
+    {
+        if (!currentStationId.HasValue)
+        {
+            return null;
+        }
+
+        var currentStation = _lineConfiguration.Stations.FirstOrDefault(s => s.Id == currentStationId.Value);
+        return ResolveNextStoppingStationFromCurrent(currentStation);
     }
 
     private bool HasStationAnnouncement(int stationId, int paIndex)

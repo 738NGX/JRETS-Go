@@ -9,8 +9,10 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
 {
     private const int ProcessVmRead = 0x0010;
     private const int ProcessQueryInformation = 0x0400;
+    private const int MergeAdjacentGapBytes = 64;
 
     private readonly MemoryOffsetsConfiguration _configuration;
+    private readonly SnapshotReadPlan _snapshotReadPlan;
 
     private Process? _process;
     private nint _processHandle;
@@ -21,6 +23,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
     public ProcessMemoryRealtimeDataSource(MemoryOffsetsConfiguration configuration)
     {
         _configuration = configuration;
+        _snapshotReadPlan = BuildSnapshotReadPlan(configuration.Offsets);
     }
 
     public bool TryAttach()
@@ -75,29 +78,123 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
             throw new InvalidOperationException(LastAttachError);
         }
 
-        var o = _configuration.Offsets;
-
-        var nextStationId = ReadInt32(o.NextStationId);
-        var doorState = ReadByte(o.DoorState);
-        var mainClock = ReadInt32(o.MainClockSeconds);
-        var timetableSec = ReadInt32(o.TimetableSecond);
-        var timetableMin = ReadInt32(o.TimetableMinute);
-        var timetableHour = ReadInt32(o.TimetableHour);
-        var currentDistance = ReadDouble(o.CurrentDistance);
-        var targetStopDistance = ReadDouble(o.TargetStopDistance);
+        var values = ReadSnapshotValues();
 
         return new RealtimeSnapshot
         {
             CapturedAt = DateTime.Now,
-            NextStationId = nextStationId,
-            DoorOpen = doorState == 1,
-            MainClockSeconds = mainClock,
-            TimetableHour = timetableHour,
-            TimetableMinute = timetableMin,
-            TimetableSecond = timetableSec,
-            CurrentDistanceMeters = currentDistance,
-            TargetStopDistanceMeters = targetStopDistance
+            NextStationId = values.NextStationId,
+            // Game door state is non-binary on some lines (e.g. transient 44 when opening).
+            // Treat any non-zero value as "door open" at snapshot level.
+            DoorOpen = values.DoorState != 0,
+            MainClockSeconds = values.MainClockSeconds,
+            TimetableHour = values.TimetableHour,
+            TimetableMinute = values.TimetableMinute,
+            TimetableSecond = values.TimetableSecond,
+            CurrentDistanceMeters = values.CurrentDistanceMeters,
+            TargetStopDistanceMeters = values.TargetStopDistanceMeters
         };
+    }
+
+    private SnapshotValues ReadSnapshotValues()
+    {
+        if (_processHandle == nint.Zero)
+        {
+            throw new InvalidOperationException("Process is not attached.");
+        }
+
+        var segmentBuffers = new byte[_snapshotReadPlan.Segments.Count][];
+        for (var i = 0; i < _snapshotReadPlan.Segments.Count; i++)
+        {
+            var segment = _snapshotReadPlan.Segments[i];
+            segmentBuffers[i] = ReadBytes(segment.StartOffset, segment.Size);
+        }
+
+        return new SnapshotValues
+        {
+            NextStationId = ReadInt32(segmentBuffers, _snapshotReadPlan.NextStationIdField),
+            DoorState = ReadByte(segmentBuffers, _snapshotReadPlan.DoorStateField),
+            MainClockSeconds = ReadInt32(segmentBuffers, _snapshotReadPlan.MainClockSecondsField),
+            TimetableSecond = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableSecondField),
+            TimetableMinute = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableMinuteField),
+            TimetableHour = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableHourField),
+            CurrentDistanceMeters = ReadDouble(segmentBuffers, _snapshotReadPlan.CurrentDistanceField),
+            TargetStopDistanceMeters = ReadDouble(segmentBuffers, _snapshotReadPlan.TargetStopDistanceField)
+        };
+    }
+
+    private static int ReadInt32(byte[][] segmentBuffers, FieldReadInfo field)
+    {
+        return BitConverter.ToInt32(segmentBuffers[field.SegmentIndex], field.BufferOffset);
+    }
+
+    private static byte ReadByte(byte[][] segmentBuffers, FieldReadInfo field)
+    {
+        return segmentBuffers[field.SegmentIndex][field.BufferOffset];
+    }
+
+    private static double ReadDouble(byte[][] segmentBuffers, FieldReadInfo field)
+    {
+        return BitConverter.ToDouble(segmentBuffers[field.SegmentIndex], field.BufferOffset);
+    }
+
+    private static SnapshotReadPlan BuildSnapshotReadPlan(MemoryOffsets offsets)
+    {
+        var fields = new List<FieldDefinition>
+        {
+            new("next_station_id", offsets.NextStationId, 4),
+            new("door_state", offsets.DoorState, 1),
+            new("main_clock_seconds", offsets.MainClockSeconds, 4),
+            new("timetable_second", offsets.TimetableSecond, 4),
+            new("timetable_minute", offsets.TimetableMinute, 4),
+            new("timetable_hour", offsets.TimetableHour, 4),
+            new("current_distance", offsets.CurrentDistance, 8),
+            new("target_stop_distance", offsets.TargetStopDistance, 8)
+        };
+
+        fields.Sort((a, b) => a.Offset.CompareTo(b.Offset));
+
+        var segments = new List<ReadSegment>();
+        var fieldInfos = new Dictionary<string, FieldReadInfo>(StringComparer.Ordinal);
+
+        foreach (var field in fields)
+        {
+            if (segments.Count == 0)
+            {
+                var firstSegment = new ReadSegment(field.Offset, field.Size);
+                segments.Add(firstSegment);
+                fieldInfos[field.Name] = new FieldReadInfo(0, 0);
+                continue;
+            }
+
+            var lastIndex = segments.Count - 1;
+            var lastSegment = segments[lastIndex];
+            var lastEndExclusive = lastSegment.StartOffset + lastSegment.Size;
+            var fieldEndExclusive = field.Offset + field.Size;
+
+            if (field.Offset <= lastEndExclusive + MergeAdjacentGapBytes)
+            {
+                var newEndExclusive = Math.Max(lastEndExclusive, fieldEndExclusive);
+                lastSegment.Size = (int)(newEndExclusive - lastSegment.StartOffset);
+                fieldInfos[field.Name] = new FieldReadInfo(lastIndex, (int)(field.Offset - lastSegment.StartOffset));
+                continue;
+            }
+
+            var nextSegment = new ReadSegment(field.Offset, field.Size);
+            segments.Add(nextSegment);
+            fieldInfos[field.Name] = new FieldReadInfo(segments.Count - 1, 0);
+        }
+
+        return new SnapshotReadPlan(
+            segments,
+            fieldInfos["next_station_id"],
+            fieldInfos["door_state"],
+            fieldInfos["main_clock_seconds"],
+            fieldInfos["timetable_second"],
+            fieldInfos["timetable_minute"],
+            fieldInfos["timetable_hour"],
+            fieldInfos["current_distance"],
+            fieldInfos["target_stop_distance"]);
     }
 
     private int ReadInt32(long relativeOffset)
@@ -135,6 +232,53 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
 
         return buffer;
     }
+
+    private readonly record struct SnapshotValues
+    {
+        public required int NextStationId { get; init; }
+
+        public required byte DoorState { get; init; }
+
+        public required int MainClockSeconds { get; init; }
+
+        public required int TimetableSecond { get; init; }
+
+        public required int TimetableMinute { get; init; }
+
+        public required int TimetableHour { get; init; }
+
+        public required double CurrentDistanceMeters { get; init; }
+
+        public required double TargetStopDistanceMeters { get; init; }
+    }
+
+    private sealed record FieldDefinition(string Name, long Offset, int Size);
+
+    private sealed class ReadSegment
+    {
+        public ReadSegment(long startOffset, int size)
+        {
+            StartOffset = startOffset;
+            Size = size;
+        }
+
+        public long StartOffset { get; }
+
+        public int Size { get; set; }
+    }
+
+    private readonly record struct FieldReadInfo(int SegmentIndex, int BufferOffset);
+
+    private sealed record SnapshotReadPlan(
+        IReadOnlyList<ReadSegment> Segments,
+        FieldReadInfo NextStationIdField,
+        FieldReadInfo DoorStateField,
+        FieldReadInfo MainClockSecondsField,
+        FieldReadInfo TimetableSecondField,
+        FieldReadInfo TimetableMinuteField,
+        FieldReadInfo TimetableHourField,
+        FieldReadInfo CurrentDistanceField,
+        FieldReadInfo TargetStopDistanceField);
 
     private void Release()
     {

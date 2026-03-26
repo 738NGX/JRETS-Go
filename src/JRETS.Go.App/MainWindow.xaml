@@ -311,7 +311,7 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Text="Stop Check"
+                        <TextBlock Text="停車評価 / Scoring"
                                    Foreground="#D7DFE6"
                                    FontSize="18"
                                    FontWeight="SemiBold"
