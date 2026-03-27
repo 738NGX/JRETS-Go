@@ -259,7 +259,7 @@
                         </Border>
                         <Border Grid.Column="3">
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="使い方 / Guide"
+                                <TextBlock Text="ご案内 / Guide"
                                            Foreground="#BBB"
                                            FontSize="18"
                                            FontWeight="Bold"
@@ -268,6 +268,12 @@
                                            Margin="0,0,0,6"
                                            HorizontalAlignment="Left"/>
                                 <TextBlock Text="· メニュー表示 / Show Menu (F7)"
+                                           Foreground="#BBB"
+                                           FontSize="12"
+                                           TextAlignment="Left"
+                                           TextWrapping="Wrap"
+                                           HorizontalAlignment="Left"/>
+                                <TextBlock Text="· 運転記録を見る / Drive Logs (F8)"
                                            Foreground="#BBB"
                                            FontSize="12"
                                            TextAlignment="Left"
@@ -467,7 +473,7 @@
                                 Click="ToggleClickThroughClick"
                                 Height="34"
                                 Margin="0,0,0,8"/>
-                        <Button Content="運転記録を見る / View Drive Logs"
+                        <Button Content="運転記録を見る / Drive Logs (F8)"
                                 Click="OpenLatestReportClick"
                                 Height="34"/>
                         <Button Content="終了する / Shut down"

@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="logo256.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="audio\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
@@ -23,6 +27,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>logo256.ico</ApplicationIcon>
   </PropertyGroup>
 
 </Project>
