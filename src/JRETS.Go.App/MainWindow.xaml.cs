@@ -48,6 +48,7 @@ public partial class MainWindow : Window
     private const int HotKeyToggleClickThrough = 1003;
     private const int HotKeyMelodyTogglePlayback = 1004;
     private const int HotKeyMelodyCycleSelection = 1005;
+    private const int HotKeyToggleReportWindow = 1006;
     private const double MelodyPanelHiddenOffsetX = -340;
     private const double MelodyPanelVisibleOffsetX = 0;
     private static readonly Duration MelodyPanelAnimationDuration = TimeSpan.FromMilliseconds(220);
@@ -96,6 +97,8 @@ public partial class MainWindow : Window
     private readonly List<TrainServiceOption> _serviceOptions = [];
     private readonly Dictionary<string, LinePathMappingEntry> _linePathMappingByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<int> _registeredHotKeys = [];
+    
+    private ReportViewerWindow? _reportViewerWindow;
 
     private nint _windowHandle;
     private bool _sessionRunning;
@@ -351,6 +354,7 @@ public partial class MainWindow : Window
         TryCleanupAnnouncementTempDirectory();
         StopLiveMemorySampling();
         _memoryDataSource?.Dispose();
+        _reportViewerWindow?.Close();
     }
 
     private void OnConfigChanged(object sender, FileSystemEventArgs e)
@@ -386,6 +390,7 @@ public partial class MainWindow : Window
         RegisterHotKey(HotKeyToggleClickThrough, HotKeyModifiers.NoRepeat, 0x76); // F7
         RegisterHotKey(HotKeyMelodyTogglePlayback, HotKeyModifiers.NoRepeat, 0x73); // F4
         RegisterHotKey(HotKeyMelodyCycleSelection, HotKeyModifiers.NoRepeat, 0x09); // Tab
+        RegisterHotKey(HotKeyToggleReportWindow, HotKeyModifiers.NoRepeat, 0x77); // F8
     }
 
     private void RegisterHotKey(int id, HotKeyModifiers modifiers, uint virtualKey)
@@ -435,6 +440,10 @@ public partial class MainWindow : Window
                     CycleMelodySelection(reverse: false);
                 }
 
+                handled = true;
+                break;
+            case HotKeyToggleReportWindow:
+                ToggleReportWindow();
                 handled = true;
                 break;
         }
@@ -1793,6 +1802,13 @@ public partial class MainWindow : Window
 
     private void OpenLatestReport()
     {
+        // If window already exists, just toggle visibility
+        if (_reportViewerWindow != null)
+        {
+            ToggleReportWindow();
+            return;
+        }
+
         var reportsDirectory = Path.Combine(AppContext.BaseDirectory, "reports");
         var latestPath = _driveReportReader.FindLatestJsonReportPath(reportsDirectory);
         if (string.IsNullOrWhiteSpace(latestPath))
@@ -1806,13 +1822,36 @@ public partial class MainWindow : Window
         {
             var report = _driveReportReader.Load(latestPath);
             var lineConfigsDirectory = Path.Combine(AppContext.BaseDirectory, "configs", "lines");
-            var viewer = new ReportViewerWindow(report, latestPath, reportsDirectory, lineConfigsDirectory);
-            viewer.Show();
+            _reportViewerWindow = new ReportViewerWindow(report, latestPath, reportsDirectory, lineConfigsDirectory);
+            _reportViewerWindow.Closed += (sender, e) =>
+            {
+                _reportViewerWindow = null;
+            };
+            _reportViewerWindow.Show();
         }
         catch (Exception ex)
         {
             _lastDataSourceError = $"Open report failed: {ex.Message}";
             UpdateDisplay();
+        }
+    }
+
+    private void ToggleReportWindow()
+    {
+        if (_reportViewerWindow == null)
+        {
+            OpenLatestReport();
+            return;
+        }
+
+        if (_reportViewerWindow.Visibility == Visibility.Visible)
+        {
+            _reportViewerWindow.Hide();
+        }
+        else
+        {
+            _reportViewerWindow.Show();
+            _reportViewerWindow.Activate();
         }
     }
 
