@@ -191,7 +191,7 @@ public partial class ReportViewerWindow
         var direction = ResolveDirectionText(report, configuration);
         var segment = FirstNonEmpty(metadata?.SegmentText, BuildSegmentText(report), "--");
         var trainNo = FirstNonEmpty(metadata?.TrainNumber, "--");
-        var serviceType = ToServiceLabel(FirstNonEmpty(metadata?.ServiceType, "Local"));
+        var serviceType = FirstNonEmpty(metadata?.ServiceType, "普通");
         var duration = report.EndedAt > report.StartedAt ? report.EndedAt - report.StartedAt : TimeSpan.Zero;
         var scoredStationCount = report.Stops.Count(x => x.IsScoredStop && x.FinalScore.HasValue);
         var averageScore = scoredStationCount > 0 ? report.TotalScore / scoredStationCount : 0;
@@ -327,16 +327,6 @@ public partial class ReportViewerWindow
         }
 
         return DefaultLineBrush;
-    }
-
-    private static string ToServiceLabel(string rawType)
-    {
-        return rawType.Trim().ToLowerInvariant() switch
-        {
-            "local" => "各駅停車",
-            "rapid" => "快速",
-            _ => rawType
-        };
     }
 
     private static string FirstNonEmpty(params string?[] values)

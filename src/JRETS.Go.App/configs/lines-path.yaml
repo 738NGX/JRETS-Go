@@ -1,0 +1,14 @@
+paths:
+  - keihintohoku/omiya_ofuna/727B.tse:
+      - line_id: keihin-negishi
+        train_id: 727B
+  - keihintohoku/omiya_ofuna/1275A.tse:
+      - line_id: keihin-negishi
+        train_id: 1275A
+  - yamanote/yamanote_in_osaki/876G.tse:
+      - line_id: yamanote
+        train_id: 876G
+  - yamanote/yamanote_in_osaki/1208G.tse:
+      - line_id: yamanote
+        train_id: 876G
+  

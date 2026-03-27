@@ -75,7 +75,7 @@ public partial class MainWindow : Window
 
     private string _lineConfigPath;
     private readonly string _offsetsConfigPath;
-    private readonly string _scoringConfigPath;
+    private readonly string _linePathMappingsConfigPath;
     private readonly FileSystemWatcher _configWatcher;
     private readonly DispatcherTimer _configReloadDebounceTimer;
 
@@ -94,6 +94,7 @@ public partial class MainWindow : Window
     private readonly ConcurrentDictionary<string, string> _announcementNormalizedPathCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<LineConfigurationOption> _lineConfigOptions = [];
     private readonly List<TrainServiceOption> _serviceOptions = [];
+    private readonly Dictionary<string, LinePathMappingEntry> _linePathMappingByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<int> _registeredHotKeys = [];
 
     private nint _windowHandle;
@@ -101,6 +102,7 @@ public partial class MainWindow : Window
     private bool _clickThroughEnabled;
     private bool _debugModeEnabled;
     private bool _usingLiveMemory;
+    private bool _manualSelectionEnabled;
     private bool _suppressComboChange;
     private bool _timelineInitialized;
     private bool _timelineLastDoorOpen;
@@ -146,6 +148,8 @@ public partial class MainWindow : Window
     private string? _originStationName;
     private int? _lastKnownStopStationId;
     private string? _lastKnownStopStationName;
+    private string? _hudStatusMessage;
+    private string? _activeLinePath;
     private DispatcherTimer? _approachValueAnimationTimer;
     private DispatcherTimer? _approachRealtimeUpdateTimer;
     private DispatcherTimer? _scoreCountupTimer;
@@ -168,9 +172,10 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         var configsDirectory = Path.Combine(AppContext.BaseDirectory, "configs");
-        _lineConfigPath = ResolveLineConfigPath(configsDirectory);
-        _offsetsConfigPath = ResolveConfigPath(configsDirectory, "memory-offsets.sample.yaml", "memory-offsets.yaml");
-        _scoringConfigPath = ResolveConfigPath(configsDirectory, "scoring.sample.yaml", "scoring.yaml");
+        var lineConfigsDirectory = Path.Combine(configsDirectory, "lines");
+        _lineConfigPath = ResolveLineConfigPath(lineConfigsDirectory);
+        _offsetsConfigPath = ResolveConfigPath(configsDirectory, "memory-offsets.yaml");
+        _linePathMappingsConfigPath = ResolveConfigPath(configsDirectory, "lines-path.yaml");
 
         var loader = new YamlLineConfigurationLoader();
         _lineConfiguration = loader.LoadFromFile(_lineConfigPath);
@@ -185,6 +190,8 @@ public partial class MainWindow : Window
 
         LineConfigComboBox.DisplayMemberPath = nameof(LineConfigurationOption.DisplayName);
         ServiceTypeComboBox.DisplayMemberPath = nameof(TrainServiceOption.DisplayName);
+        EnableManualSelectionCheckBox.IsChecked = false;
+        _manualSelectionEnabled = false;
 
         LoadLineConfigurationOptions();
 
@@ -192,7 +199,7 @@ public partial class MainWindow : Window
 
         _configWatcher = new FileSystemWatcher(Path.Combine(AppContext.BaseDirectory, "configs"), "*.yaml")
         {
-            IncludeSubdirectories = false,
+            IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName
         };
         _configWatcher.Changed += OnConfigChanged;
@@ -257,6 +264,17 @@ public partial class MainWindow : Window
     private void ToggleDebugModeClick(object sender, RoutedEventArgs e)
     {
         _debugModeEnabled = !_debugModeEnabled;
+        UpdateDisplay();
+    }
+
+    private void ManualSelectionToggleChanged(object sender, RoutedEventArgs e)
+    {
+        _manualSelectionEnabled = EnableManualSelectionCheckBox.IsChecked == true;
+        if (!_manualSelectionEnabled)
+        {
+            _hudStatusMessage = "手动线路选择已关闭：F9 时将自动识别线路与运行图。";
+        }
+
         UpdateDisplay();
     }
 
@@ -657,6 +675,30 @@ public partial class MainWindow : Window
 
     private void StartSession()
     {
+        _hudStatusMessage = null;
+
+        if (!_manualSelectionEnabled)
+        {
+            if (!TryApplyAutoLineAndServiceSelection(out var autoSelectionError))
+            {
+                _sessionRunning = false;
+                _usingLiveMemory = false;
+                StopLiveMemorySampling();
+                _hudStatusMessage = autoSelectionError;
+                UpdateDisplay();
+                return;
+            }
+        }
+        else if (_selectedService is null)
+        {
+            _sessionRunning = false;
+            _usingLiveMemory = false;
+            StopLiveMemorySampling();
+            _hudStatusMessage = "未选择运行图：请在 Debug -> Manual Line Selection 中选择后再开始。";
+            UpdateDisplay();
+            return;
+        }
+
         _sessionRunning = true;
         _timelineInitialized = false;
         _sessionStartedAt = DateTime.Now;
@@ -685,6 +727,7 @@ public partial class MainWindow : Window
         {
             _sessionTerminalStationId = NormalizeStationIdForScoring(_sessionTerminalStationId.Value);
         }
+
         _usingLiveMemory = TryActivateLiveMemoryMode();
         if (!_usingLiveMemory)
         {
@@ -727,10 +770,9 @@ public partial class MainWindow : Window
         }
 
         _sessionRunning = false;
+        _hudStatusMessage = null;
         _usingLiveMemory = false;
         StopLiveMemorySampling();
-        _runningTotalScore = 0;
-        _runningMaxScore = 0;
         _lastDistanceSampleMeters = null;
         _lastKnownStopStationId = null;
         _lastKnownStopStationName = null;
@@ -843,16 +885,50 @@ public partial class MainWindow : Window
     private void UpdateDisplay()
     {
         var snapshot = GetCurrentSnapshot();
+        _activeLinePath = snapshot.LinePath;
         TrackSessionDistance(snapshot);
+        var sourceText = _usingLiveMemory ? "LiveMemory" : "Debug";
+
+        ToggleDebugModeButton.Content = _debugModeEnabled ? "Disable Debug Mode" : "Enable Debug Mode";
+        DebugModeStateText.Text = _debugModeEnabled
+            ? $"Mode: On ({sourceText})"
+            : "Mode: Off";
+        DebugActionsPanel.Visibility = _debugModeEnabled ? Visibility.Visible : Visibility.Collapsed;
+        ManualSelectionPanel.Visibility = _debugModeEnabled && _manualSelectionEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        var hasHudStatus = TryGetHudStatusMessage(out var hudMessage);
+        if (hasHudStatus)
+        {
+            ApplyLineColor();
+            ServiceTypeTextBlock.Text = string.Empty;
+            ServiceTypeTagBorder.Background = Brushes.Transparent;
+            DirectionTextBlock.Text = string.Empty;
+            NextStationStatusTextBlock.Text = "";
+            NextStationNameTextBlock.Text = hudMessage;
+            StationCodeBadgeOuterBorder.Visibility = Visibility.Collapsed;
+            StationCode.Text = string.Empty;
+            LineCode.Text = string.Empty;
+            LineNumberBadgeTextBlock.Text = string.Empty;
+            _upcomingStations.Clear();
+            ErrorTextBlock.Text = string.IsNullOrWhiteSpace(_lastDataSourceError)
+                ? string.Empty
+                : $"Info: {_lastDataSourceError}";
+            UpdateMemoryDebugText(snapshot);
+            return;
+        }
+
         var state = _displayStateResolver.Resolve(_lineConfiguration, snapshot);
         _latestApproachSnapshot = snapshot;
         _latestApproachState = state;
         CaptureStopScore(snapshot, state);
 
-        var sourceText = _usingLiveMemory ? "LiveMemory" : "Debug";
-
         ApplyLineColor();
-        ServiceTypeTextBlock.Text = GetServiceTypeDisplayName();
+        var serviceTypeText = GetServiceTypeDisplayName();
+        var hasServiceTypeText = !string.IsNullOrWhiteSpace(serviceTypeText);
+        ServiceTypeTextBlock.Text = hasServiceTypeText ? serviceTypeText : string.Empty;
+        ServiceTypeTagBorder.Background = hasServiceTypeText ? LineColorPreview.Background : Brushes.Transparent;
         DirectionTextBlock.Text = GetDirectionText(state);
 
         // Determine display station and status text based on door and distance
@@ -895,12 +971,17 @@ public partial class MainWindow : Window
         NextStationStatusTextBlock.Text = statusText;
 
         var hasStationCode = displayStation is not null && !string.IsNullOrWhiteSpace(displayStation.Code);
+        var lineCodeText = _lineConfiguration.LineInfo.Code;
+        var lineNumberText = displayStation is null ? string.Empty : displayStation.Number.ToString("00");
+        var hasLineCode = !string.IsNullOrWhiteSpace(lineCodeText);
+        var hasLineNumber = !string.IsNullOrWhiteSpace(lineNumberText);
+        var showStationCodeBadge = hasStationCode && hasLineCode && hasLineNumber;
+
         NextStationNameTextBlock.Text = displayStation?.NameJp ?? "--";
-        StationCode.Text = hasStationCode ? displayStation!.Code! : string.Empty;
-        StationCode.Foreground = hasStationCode ? Brushes.White : Brushes.Transparent;
-        StationCodeBadgeOuterBorder.Background = hasStationCode ? Brushes.Black : Brushes.Transparent;
-        LineCode.Text = _lineConfiguration.LineInfo.Code;
-        LineNumberBadgeTextBlock.Text = displayStation is null ? "--" : displayStation.Number.ToString("00");
+        StationCodeBadgeOuterBorder.Visibility = showStationCodeBadge ? Visibility.Visible : Visibility.Collapsed;
+        StationCode.Text = showStationCodeBadge ? displayStation!.Code! : string.Empty;
+        LineCode.Text = showStationCodeBadge ? lineCodeText : string.Empty;
+        LineNumberBadgeTextBlock.Text = showStationCodeBadge ? lineNumberText : string.Empty;
 
         RefreshUpcomingStations(snapshot, state);
         HandleAutoAnnouncements(snapshot, state);
@@ -911,11 +992,35 @@ public partial class MainWindow : Window
             ? string.Empty
             : $"Info: {_lastDataSourceError}";
 
-        ToggleDebugModeButton.Content = _debugModeEnabled ? "Disable Debug Mode" : "Enable Debug Mode";
-        DebugModeStateText.Text = _debugModeEnabled
-            ? $"Mode: On ({sourceText})"
-            : "Mode: Off";
+        UpdateMemoryDebugText(snapshot);
+    }
 
+    private bool TryGetHudStatusMessage(out string message)
+    {
+        if (!string.IsNullOrWhiteSpace(_hudStatusMessage))
+        {
+            message = _hudStatusMessage!;
+            return true;
+        }
+
+        if (!_sessionRunning)
+        {
+            message = "運転外 / Not Driving";
+            return true;
+        }
+
+        if (_selectedService is null)
+        {
+            message = "Error: No service selected";
+            return true;
+        }
+
+        message = string.Empty;
+        return false;
+    }
+
+    private void UpdateMemoryDebugText(RealtimeSnapshot snapshot)
+    {
         MemNextStationText.Text = $"Current Station Id: {snapshot.NextStationId}";
         MemDoorText.Text = $"Door Open: {(snapshot.DoorOpen ? "True" : "False")}";
         var clockTime = TimeSpan.FromSeconds(snapshot.MainClockSeconds);
@@ -924,8 +1029,9 @@ public partial class MainWindow : Window
             $"Timetable (H:M:S): {snapshot.TimetableHour:D2}:{snapshot.TimetableMinute:D2}:{snapshot.TimetableSecond:D2}";
         MemCurrentDistanceText.Text = $"Current Distance (m): {snapshot.CurrentDistanceMeters:F2}";
         MemTargetDistanceText.Text = $"Target Stop Distance (m): {snapshot.TargetStopDistanceMeters:F2}";
-
-        DebugActionsPanel.Visibility = _debugModeEnabled ? Visibility.Visible : Visibility.Collapsed;
+        MemLinePathText.Text = string.IsNullOrWhiteSpace(snapshot.LinePath)
+            ? "Line Path: <empty>"
+            : $"Line Path: {snapshot.LinePath}";
     }
 
     private void TrackSessionDistance(RealtimeSnapshot snapshot)
@@ -1172,7 +1278,8 @@ public partial class MainWindow : Window
             TimetableMinute = scheduledMinute,
             TimetableSecond = scheduledSecond,
             CurrentDistanceMeters = adjustedCurrentDistance,
-            TargetStopDistanceMeters = targetStopDistance
+            TargetStopDistanceMeters = targetStopDistance,
+            LinePath = currentSnapshot.LinePath
         };
     }
 
@@ -1644,6 +1751,7 @@ public partial class MainWindow : Window
     {
         var currentSnapshot = GetCurrentSnapshot();
         var currentState = _displayStateResolver.Resolve(_lineConfiguration, currentSnapshot);
+        var reportTrainNumber = ResolveReportTrainNumber(currentSnapshot);
 
         var firstStation = _originStationName ?? _stationScores.FirstOrDefault()?.StationName;
         var lastStation = _stationScores.LastOrDefault()?.StationName;
@@ -1664,7 +1772,7 @@ public partial class MainWindow : Window
             DistanceMeters = Math.Round(_sessionDistanceMeters, 1),
             Metadata = new DriveSessionMetadata
             {
-                TrainNumber = _selectedService?.Train.Id,
+                TrainNumber = reportTrainNumber,
                 ServiceType = _selectedService?.Train.Type,
                 LineId = _lineConfiguration.LineInfo.Id,
                 LineCode = _lineConfiguration.LineInfo.Code,
@@ -1697,8 +1805,8 @@ public partial class MainWindow : Window
         try
         {
             var report = _driveReportReader.Load(latestPath);
-            var configsDirectory = Path.Combine(AppContext.BaseDirectory, "configs");
-            var viewer = new ReportViewerWindow(report, latestPath, reportsDirectory, configsDirectory);
+            var lineConfigsDirectory = Path.Combine(AppContext.BaseDirectory, "configs", "lines");
+            var viewer = new ReportViewerWindow(report, latestPath, reportsDirectory, lineConfigsDirectory);
             viewer.Show();
         }
         catch (Exception ex)
@@ -1706,6 +1814,131 @@ public partial class MainWindow : Window
             _lastDataSourceError = $"Open report failed: {ex.Message}";
             UpdateDisplay();
         }
+    }
+
+    private bool TryApplyAutoLineAndServiceSelection(out string errorMessage)
+    {
+        errorMessage = string.Empty;
+
+        if (_memoryDataSource is null)
+        {
+            errorMessage = "Error: Memory data source is not initialized.";
+            return false;
+        }
+
+        if (!_memoryDataSource.TryAttach())
+        {
+            errorMessage = $"Error: Failed to attach to process: {_memoryDataSource.LastAttachError}";
+            return false;
+        }
+
+        RealtimeSnapshot snapshot;
+        try
+        {
+            snapshot = _memoryDataSource.GetSnapshot();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: Failed to read line_path: {ex.Message}";
+            return false;
+        }
+
+        _activeLinePath = snapshot.LinePath;
+        var normalizedPath = NormalizeLinePath(snapshot.LinePath);
+        if (string.IsNullOrWhiteSpace(normalizedPath))
+        {
+            errorMessage = "運転外 / Not Driving";
+            return false;
+        }
+
+        if (!TryResolveLineAndTrainByPath(normalizedPath, out var mapping))
+        {
+            errorMessage = "未対応 / Not supported";
+            return false;
+        }
+
+        var lineOption = _lineConfigOptions.FirstOrDefault(x =>
+            string.Equals(x.Configuration.LineInfo.Id, mapping.LineId, StringComparison.OrdinalIgnoreCase));
+        if (lineOption is null)
+        {
+            errorMessage = $"Error: Line configuration not found: {mapping.LineId}";
+            return false;
+        }
+
+        ApplyLineConfiguration(lineOption);
+        SelectServiceByTrainId(mapping.TrainId);
+        if (_selectedService is null)
+        {
+            errorMessage = $"Error: Line {mapping.LineId} is missing a timetable: {mapping.TrainId}";
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryResolveLineAndTrainByPath(string normalizedPath, out LinePathMappingEntry mapping)
+    {
+        if (_linePathMappingByPath.TryGetValue(normalizedPath, out var found) && found is not null)
+        {
+            mapping = found;
+            return true;
+        }
+
+        foreach (var pair in _linePathMappingByPath)
+        {
+            if (normalizedPath.EndsWith(pair.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                mapping = pair.Value;
+                return true;
+            }
+        }
+
+        mapping = null!;
+        return false;
+    }
+
+    private string? ResolveReportTrainNumber(RealtimeSnapshot snapshot)
+    {
+        var normalizedPath = NormalizeLinePath(_activeLinePath ?? snapshot.LinePath);
+        if (!string.IsNullOrWhiteSpace(normalizedPath)
+            && TryResolveLineAndTrainByPath(normalizedPath, out var mapping)
+            && !string.IsNullOrWhiteSpace(mapping.DiagramId))
+        {
+            return mapping.DiagramId;
+        }
+
+        return _selectedService?.Train.Id;
+    }
+
+    private static string NormalizeLinePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var normalized = value.Trim().Replace('\\', '/').ToLowerInvariant();
+        return normalized.TrimStart('/');
+    }
+
+    private void SelectServiceByTrainId(string trainId)
+    {
+        if (string.IsNullOrWhiteSpace(trainId))
+        {
+            return;
+        }
+
+        var target = _serviceOptions.FirstOrDefault(x =>
+            string.Equals(x.Train.Id, trainId, StringComparison.OrdinalIgnoreCase));
+        if (target is null)
+        {
+            return;
+        }
+
+        _suppressComboChange = true;
+        ServiceTypeComboBox.SelectedItem = target;
+        _suppressComboChange = false;
+        _selectedService = target;
     }
 
     private bool TryActivateLiveMemoryMode()
@@ -1886,16 +2119,9 @@ public partial class MainWindow : Window
     private void ReloadConfigurations()
     {
         LoadLineConfigurationOptions();
+        LoadLinePathMappings();
 
-        if (File.Exists(_scoringConfigPath))
-        {
-            var scoringLoader = new YamlScoringConfigurationLoader();
-            _scoringConfiguration = scoringLoader.LoadFromFile(_scoringConfigPath);
-        }
-        else
-        {
-            _scoringConfiguration = new ScoringConfiguration();
-        }
+        _scoringConfiguration = new ScoringConfiguration();
 
         _stopScoringService = new StopScoringService(_scoringConfiguration);
 
@@ -1911,9 +2137,38 @@ public partial class MainWindow : Window
         }
     }
 
+    private void LoadLinePathMappings()
+    {
+        _linePathMappingByPath.Clear();
+        if (!File.Exists(_linePathMappingsConfigPath))
+        {
+            return;
+        }
+
+        var loader = new YamlLinePathMappingsConfigurationLoader();
+        var config = loader.LoadFromFile(_linePathMappingsConfigPath);
+        foreach (var entry in config.Paths)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Path)
+                || string.IsNullOrWhiteSpace(entry.LineId)
+                || string.IsNullOrWhiteSpace(entry.TrainId))
+            {
+                continue;
+            }
+
+            var key = NormalizeLinePath(entry.Path);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            _linePathMappingByPath[key] = entry;
+        }
+    }
+
     private void LoadLineConfigurationOptions()
     {
-        var configsDirectory = Path.Combine(AppContext.BaseDirectory, "configs");
+        var configsDirectory = Path.Combine(AppContext.BaseDirectory, "configs", "lines");
         var lineLoader = new YamlLineConfigurationLoader();
         var previousPath = _lineConfigPath;
 
@@ -1970,6 +2225,7 @@ public partial class MainWindow : Window
     {
         _lineConfigPath = option.FilePath;
         _lineConfiguration = option.Configuration;
+        _hudStatusMessage = null;
         _debugDataSource = new DebugRealtimeDataSource(_lineConfiguration.Stations);
         _timelineInitialized = false;
         PopulateServiceOptions();
@@ -1994,7 +2250,7 @@ public partial class MainWindow : Window
             _serviceOptions.Add(new TrainServiceOption
             {
                 Train = train,
-                DisplayName = $"{ToServiceLabel(train.Type)} ({train.Id})"
+                DisplayName = $"{train.Type} ({train.Id})"
             });
         }
 
@@ -2035,12 +2291,7 @@ public partial class MainWindow : Window
 
     private string GetServiceTypeDisplayName()
     {
-        if (_selectedService is null)
-        {
-            return "各駅停車";
-        }
-
-        return ToServiceLabel(_selectedService.Train.Type);
+        return _selectedService?.Train.Type ?? string.Empty;
     }
 
     private string GetDirectionText(TrainDisplayState state)
@@ -2827,21 +3078,6 @@ public partial class MainWindow : Window
             : $"M0,0 L{bodyEndX:0.##},0 L{width:0.##},{midY:0.##} L{bodyEndX:0.##},{ArrowHeight:0.##} L0,{ArrowHeight:0.##} L{notch:0.##},{midY:0.##} Z";
     }
 
-    private static string ToServiceLabel(string rawType)
-    {
-        if (string.Equals(rawType, "Local", StringComparison.OrdinalIgnoreCase))
-        {
-            return "各駅停車";
-        }
-
-        if (string.Equals(rawType, "Rapid", StringComparison.OrdinalIgnoreCase))
-        {
-            return "快速";
-        }
-
-        return rawType;
-    }
-
     private static string ResolveConfigPath(string configsDirectory, string sampleFileName, string preferredFileName)
     {
         var preferredPath = Path.Combine(configsDirectory, preferredFileName);
@@ -2853,27 +3089,26 @@ public partial class MainWindow : Window
         return Path.Combine(configsDirectory, sampleFileName);
     }
 
-    private static string ResolveLineConfigPath(string configsDirectory)
+    private static string ResolveConfigPath(string configsDirectory, string fileName)
     {
-        var preferredPath = Path.Combine(configsDirectory, "keihin-negishi.yaml");
+        return ResolveConfigPath(configsDirectory, fileName, fileName);
+    }
+
+    private static string ResolveLineConfigPath(string lineConfigsDirectory)
+    {
+        var preferredPath = Path.Combine(lineConfigsDirectory, "keihin-negishi.yaml");
         if (File.Exists(preferredPath))
         {
             return preferredPath;
         }
 
-        var samplePath = Path.Combine(configsDirectory, "keihin-negishi.sample.yaml");
-        if (File.Exists(samplePath))
+        if (!Directory.Exists(lineConfigsDirectory))
         {
-            return samplePath;
-        }
-
-        if (!Directory.Exists(configsDirectory))
-        {
-            return samplePath;
+            return preferredPath;
         }
 
         var loader = new YamlLineConfigurationLoader();
-        foreach (var file in Directory.EnumerateFiles(configsDirectory, "*.yaml"))
+        foreach (var file in Directory.EnumerateFiles(lineConfigsDirectory, "*.yaml"))
         {
             try
             {
@@ -2886,7 +3121,7 @@ public partial class MainWindow : Window
             }
         }
 
-        return samplePath;
+        return preferredPath;
     }
 
     private sealed class LineConfigurationOption

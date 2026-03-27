@@ -26,4 +26,6 @@ public sealed class MemoryOffsets
     public required long CurrentDistance { get; init; }
 
     public required long TargetStopDistance { get; init; }
+
+    public long LinePath { get; init; }
 }

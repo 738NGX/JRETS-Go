@@ -51,7 +51,8 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
             TimetableMinute = timetable.Minutes,
             TimetableSecond = timetable.Seconds,
             CurrentDistanceMeters = _currentDistance,
-            TargetStopDistanceMeters = _targetStopDistance
+            TargetStopDistanceMeters = _targetStopDistance,
+            LinePath = null
         };
     }
 

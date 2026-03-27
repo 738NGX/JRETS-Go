@@ -9,3 +9,4 @@ offsets:
   timetable_hour: "0x15354E4"
   current_distance: "0x14CBA98"
   target_stop_distance: "0x10DFA70"
+  line_path: "0xEEAB1E"

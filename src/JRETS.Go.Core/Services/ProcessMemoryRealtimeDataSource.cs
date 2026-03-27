@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using JRETS.Go.Core.Configuration;
 using JRETS.Go.Core.Runtime;
 
@@ -10,6 +11,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
     private const int ProcessVmRead = 0x0010;
     private const int ProcessQueryInformation = 0x0400;
     private const int MergeAdjacentGapBytes = 64;
+    private const int LinePathReadLength = 1024;
 
     private readonly MemoryOffsetsConfiguration _configuration;
     private readonly SnapshotReadPlan _snapshotReadPlan;
@@ -92,7 +94,8 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
             TimetableMinute = values.TimetableMinute,
             TimetableSecond = values.TimetableSecond,
             CurrentDistanceMeters = values.CurrentDistanceMeters,
-            TargetStopDistanceMeters = values.TargetStopDistanceMeters
+            TargetStopDistanceMeters = values.TargetStopDistanceMeters,
+            LinePath = values.LinePath
         };
     }
 
@@ -119,8 +122,28 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
             TimetableMinute = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableMinuteField),
             TimetableHour = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableHourField),
             CurrentDistanceMeters = ReadDouble(segmentBuffers, _snapshotReadPlan.CurrentDistanceField),
-            TargetStopDistanceMeters = ReadDouble(segmentBuffers, _snapshotReadPlan.TargetStopDistanceField)
+            TargetStopDistanceMeters = ReadDouble(segmentBuffers, _snapshotReadPlan.TargetStopDistanceField),
+            LinePath = ReadLinePath(_configuration.Offsets.LinePath)
         };
+    }
+
+    private string? ReadLinePath(long relativeOffset)
+    {
+        if (relativeOffset <= 0)
+        {
+            return null;
+        }
+
+        var bytes = ReadBytes(relativeOffset, LinePathReadLength);
+        var terminatorIndex = Array.IndexOf(bytes, (byte)0);
+        var contentLength = terminatorIndex >= 0 ? terminatorIndex : bytes.Length;
+        if (contentLength <= 0)
+        {
+            return null;
+        }
+
+        var value = Encoding.UTF8.GetString(bytes, 0, contentLength).Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static int ReadInt32(byte[][] segmentBuffers, FieldReadInfo field)
@@ -250,6 +273,8 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
         public required double CurrentDistanceMeters { get; init; }
 
         public required double TargetStopDistanceMeters { get; init; }
+
+        public string? LinePath { get; init; }
     }
 
     private sealed record FieldDefinition(string Name, long Offset, int Size);

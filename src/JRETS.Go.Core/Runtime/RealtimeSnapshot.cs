@@ -19,4 +19,6 @@ public sealed class RealtimeSnapshot
     public required double CurrentDistanceMeters { get; init; }
 
     public required double TargetStopDistanceMeters { get; init; }
+
+    public string? LinePath { get; init; }
 }

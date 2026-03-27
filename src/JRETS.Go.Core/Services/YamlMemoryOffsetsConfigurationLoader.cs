@@ -45,7 +45,8 @@ public sealed class YamlMemoryOffsetsConfigurationLoader : IMemoryOffsetsConfigu
                 TimetableMinute = ParseOffset(yaml.Offsets.TimetableMinute, nameof(yaml.Offsets.TimetableMinute)),
                 TimetableHour = ParseOffset(yaml.Offsets.TimetableHour, nameof(yaml.Offsets.TimetableHour)),
                 CurrentDistance = ParseOffset(yaml.Offsets.CurrentDistance, nameof(yaml.Offsets.CurrentDistance)),
-                TargetStopDistance = ParseOffset(yaml.Offsets.TargetStopDistance, nameof(yaml.Offsets.TargetStopDistance))
+                TargetStopDistance = ParseOffset(yaml.Offsets.TargetStopDistance, nameof(yaml.Offsets.TargetStopDistance)),
+                LinePath = ParseOptionalOffset(yaml.Offsets.LinePath)
             }
         };
     }
@@ -55,6 +56,21 @@ public sealed class YamlMemoryOffsetsConfigurationLoader : IMemoryOffsetsConfigu
         if (string.IsNullOrWhiteSpace(value))
         {
             throw new InvalidOperationException($"Offset {fieldName} is required.");
+        }
+
+        if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return Convert.ToInt64(value[2..], 16);
+        }
+
+        return Convert.ToInt64(value, 10);
+    }
+
+    private static long ParseOptionalOffset(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return 0;
         }
 
         if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
@@ -91,5 +107,7 @@ public sealed class YamlMemoryOffsetsConfigurationLoader : IMemoryOffsetsConfigu
         public string? CurrentDistance { get; init; }
 
         public string? TargetStopDistance { get; init; }
+
+        public string? LinePath { get; init; }
     }
 }

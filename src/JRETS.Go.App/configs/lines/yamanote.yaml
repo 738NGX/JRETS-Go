@@ -1,0 +1,321 @@
+line_info:
+  id: yamanote
+  name_jp: 山手線
+  name_en: Yamanote Line
+  line_color: "#7BAB4F"
+  code: JY
+  is_loop: true
+train_info:
+  - id: 876G
+    type: 各駅停車
+    terminal: 30201
+    major_station_ids:
+      - 30229
+      - 30224
+      - 30220
+      - 30212
+      - 30208
+      - 30205
+stations:
+  - id: 30201
+    number: 24
+    name_jp: 大崎
+    name_en: Osaki
+    code: OSK
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "遊園地のある駅.mp3"
+      - "海の駅.mp3"
+  - id: 30229
+    number: 25
+    name_jp: 品川
+    name_en: Shinagawa
+    code: SGW
+    pa:
+      876G:
+        - "1.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "せせらぎ.mp3"
+  - id: 30228
+    number: 27
+    name_jp: 田町
+    name_en: Tamachi
+    pa:
+      876G:
+        - "3.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "せせらぎ.mp3"
+  - id: 30227
+    number: 28
+    name_jp: 浜松町
+    name_en: Hamamatsucho
+    code: HMC
+    pa:
+      876G:
+        - "4.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "せせらぎ.mp3"
+  - id: 30226
+    number: 29
+    name_jp: 新橋
+    name_en: Shimbashi
+    code: SMB
+    pa:
+      876G:
+        - "5.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "Gota del Vient.mp3"
+  - id: 30225
+    number: 30
+    name_jp: 有楽町
+    name_en: Yurakucho
+    pa:
+      876G:
+        - "6.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "JR-SH2.mp3"
+  - id: 30224
+    number: 1
+    name_jp: 東京
+    name_en: Tokyo
+    code: TYO
+    pa:
+      876G:
+        - "7.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "JR-SH3.mp3"
+  - id: 30223
+    number: 2
+    name_jp: 神田
+    name_en: Kanda
+    code: KND
+    pa:
+      876G:
+        - "8.mp3"
+    melody:
+      - "モンダミン Ver.B.mp3"
+      - "せせらぎ.mp3"
+  - id: 30222
+    number: 3
+    name_jp: 秋葉原
+    name_en: Akihabara
+    code: AKB
+    pa:
+      876G:
+        - "9.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "小川のせせらぎ.mp3"
+  - id: 30221
+    number: 4
+    name_jp: 御徒町
+    name_en: Okachimachi
+    pa:
+      876G:
+        - "10.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "春.mp3"
+  - id: 30220
+    number: 5
+    name_jp: 上野
+    name_en: Ueno
+    code: UEN
+    pa:
+      876G:
+        - "11.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "ROMベル.mp3"
+  - id: 30219
+    number: 6
+    name_jp: 鶯谷
+    name_en: Uguisudani
+    pa:
+      876G:
+        - "12.mp3"
+    melody:
+      - "春.mp3"
+  - id: 30218
+    number: 7
+    name_jp: 日暮里
+    name_en: Nippori
+    code: NPR
+    pa:
+      876G:
+        - "13.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "春.mp3"
+  - id: 30217
+    number: 8
+    name_jp: 西日暮里
+    name_en: Nishi-Nippori
+    pa:
+      876G:
+        - "14.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "春.mp3"
+  - id: 30216
+    number: 9
+    name_jp: 田端
+    name_en: Tabata
+    pa:
+      876G:
+        - "15.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "春.mp3"
+  - id: 30215
+    number: 10
+    name_jp: 駒込
+    name_en: Komagome
+    pa:
+      876G:
+        - "16.mp3"
+    melody:
+      - "さくらさくら.mp3"
+  - id: 30214
+    number: 11
+    name_jp: 巣鴨
+    name_en: Sugamo
+    pa:
+      876G:
+        - "17.mp3"
+    melody:
+      - "春.mp3"
+  - id: 30213
+    number: 12
+    name_jp: 大塚
+    name_en: Otsuka
+    pa:
+      876G:
+        - "18.mp3"
+    melody:
+      - "春.mp3"
+  - id: 30212
+    number: 13
+    name_jp: 池袋
+    name_en: Ikebukuro
+    code: IKB
+    pa:
+      876G:
+        - "19.mp3"
+    melody:
+      - "ビックカメラテーマソング.mp3"
+      - "せせらぎ.mp3"
+  - id: 30211
+    number: 14
+    name_jp: 目白
+    name_en: Mejiro
+    pa:
+      876G:
+        - "20.mp3"
+    melody:
+      - "春.mp3"
+  - id: 30210
+    number: 15
+    name_jp: 高田馬場
+    name_en: Takadanobaba
+    pa:
+      876G:
+        - "21.mp3"
+    melody:
+      - "鉄腕アトム Ver.B.mp3"
+  - id: 30209
+    number: 16
+    name_jp: 新大久保
+    name_en: Shin-Okubo
+    pa:
+      876G:
+        - "22.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "ROMベル.mp3"
+  - id: 30208
+    number: 17
+    name_jp: 新宿
+    name_en: Shinjuku
+    code: SJK
+    pa:
+      876G:
+        - "23.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "新たな季節.mp3"
+  - id: 30207
+    number: 18
+    name_jp: 代々木
+    name_en: Yoyogi
+    pa:
+      876G:
+        - "24.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "春.mp3"
+  - id: 30206
+    number: 19
+    name_jp: 原宿
+    name_en: Harajuku
+    pa:
+      876G:
+        - "25.mp3"
+    melody:
+      - "原宿a.mp3"
+  - id: 30205
+    number: 20
+    name_jp: 渋谷
+    name_en: Shibuya
+    code: SBY
+    pa:
+      876G:
+        - "26.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "花のほころび.mp3"
+  - id: 30204
+    number: 21
+    name_jp: 恵比寿
+    name_en: Ebisu
+    code: EBS
+    pa:
+      876G:
+        - "27.mp3"
+    melody:
+      - "第三の男 Ver.F.mp3"
+  - id: 30203
+    number: 22
+    name_jp: 目黒
+    name_en: Meguro
+    pa:
+      876G:
+        - "28.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "Water Crown.mp3"
+  - id: 30202
+    number: 23
+    name_jp: 五反田
+    name_en: Gotanda
+    pa:
+      876G:
+        - "29.mp3"
+    melody:
+      - "JRE-IKST-010-01.mp3"
+      - "JR-SH2.mp3"
+  - id: 30200
+    number: 24
+    name_jp: 大崎
+    name_en: Osaki
+    code: OSK
+    pa:
+      876G:
+        - "30.mp3"
+    melody: []
