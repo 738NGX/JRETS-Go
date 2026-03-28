@@ -40,7 +40,8 @@
     "coordinates": [
       139.6692619,
       35.8478021
-    ]
+    ],
+    "labeled": true
   },
   "33207": {
     "displacement": 10.6741,
@@ -68,7 +69,8 @@
     "coordinates": [
       139.7210464,
       35.7782533
-    ]
+    ],
+    "labeled": true
   },
   "33211": {
     "displacement": 18.9292,
@@ -124,7 +126,8 @@
     "coordinates": [
       139.7762651,
       35.7135261
-    ]
+    ],
+    "labeled": true
   },
   "33219": {
     "displacement": 27.4037,
@@ -152,7 +155,8 @@
     "coordinates": [
       139.766771,
       35.6812103
-    ]
+    ],
+    "labeled": true
   },
   "33223": {
     "displacement": 31.1613,
@@ -187,7 +191,8 @@
     "coordinates": [
       139.7387253,
       35.6286682
-    ]
+    ],
+    "labeled": true
   },
   "33228": {
     "displacement": 39.6014,
@@ -215,7 +220,8 @@
     "coordinates": [
       139.6969363,
       35.5313708
-    ]
+    ],
+    "labeled": true
   },
   "33232": {
     "displacement": 52.0006,
@@ -243,7 +249,8 @@
     "coordinates": [
       139.6225325,
       35.4656482
-    ]
+    ],
+    "labeled": true
   },
   "33236": {
     "displacement": 61.0352,
@@ -285,7 +292,8 @@
     "coordinates": [
       139.6182208,
       35.4001131
-    ]
+    ],
+    "labeled": true
   },
   "33242": {
     "displacement": 70.2549,
