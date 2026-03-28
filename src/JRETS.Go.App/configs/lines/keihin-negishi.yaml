@@ -11,6 +11,9 @@ train_info:
   - id: 1275A
     type: 快速
     terminal: 33246
+map_info:
+  stations: keihin-negishi_stations.json
+  route: keihin-negishi_route.json
 stations:
   - id: 33201
     number: 47

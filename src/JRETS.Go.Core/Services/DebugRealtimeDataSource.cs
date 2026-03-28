@@ -5,7 +5,9 @@ namespace JRETS.Go.Core.Services;
 
 public sealed class DebugRealtimeDataSource : IRealtimeDataSource
 {
-    private const double DebugDepartureStepMeters = 220;
+    private const double FallbackStationSpacingMeters = 1000;
+    private const double DebugDepartureAdvanceMeters = 200;
+    private const double DebugApproachRemainingMeters = 100;
     private enum DebugPhase
     {
         /// <summary>停靠站，开门: ただいま</summary>
@@ -17,15 +19,18 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
     }
 
     private readonly IReadOnlyList<StationInfo> _stations;
+    private readonly double[] _stationStopDisplacements;
     private int _currentStationIndex;
     private DebugPhase _currentPhase = DebugPhase.Stopped;
 
     private bool _doorOpen = true;
     private int _clockSeconds = 8 * 3600;
     private double _currentDistance;
-    private double _targetStopDistance = 500;
+    private double _targetStopDistance;
 
-    public DebugRealtimeDataSource(IReadOnlyList<StationInfo> stations)
+    public DebugRealtimeDataSource(
+        IReadOnlyList<StationInfo> stations,
+        IReadOnlyDictionary<int, double>? stationDisplacementsMeters = null)
     {
         if (stations.Count < 2)
         {
@@ -33,7 +38,9 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
         }
 
         _stations = stations.ToArray();
+        _stationStopDisplacements = BuildStationStopDisplacements(_stations, stationDisplacementsMeters);
         _currentStationIndex = 0;
+        StartSession();
     }
 
     public RealtimeSnapshot GetSnapshot()
@@ -60,10 +67,10 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
     {
         _doorOpen = true;
         _clockSeconds = 8 * 3600;
-        _currentDistance = 0;
-        _targetStopDistance = 500;
         _currentStationIndex = 0;
         _currentPhase = DebugPhase.Stopped;
+        _currentDistance = ResolveCurrentStopDistance();
+        _targetStopDistance = ResolveTargetStopDistance();
     }
 
     /// <summary>
@@ -77,13 +84,13 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
                 // ただいま → 次は (close door and depart)
                 _currentPhase = DebugPhase.Departed;
                 _doorOpen = false;
-                _currentDistance += DebugDepartureStepMeters;
+                _currentDistance = ResolveDepartedDistance();
                 break;
 
             case DebugPhase.Departed:
-                // 次は → まもなく (train approaches next station, distance < 350m)
+                // 次は → まもなく (train approaches next station)
                 _currentPhase = DebugPhase.Approaching;
-                _currentDistance = _targetStopDistance - 300; // approaching: < 350m away
+                _currentDistance = ResolveApproachingDistance();
                 break;
 
             case DebugPhase.Approaching:
@@ -95,8 +102,8 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
 
                 _currentPhase = DebugPhase.Stopped;
                 _doorOpen = true;
-                _currentDistance = _targetStopDistance;
-                _targetStopDistance += 900;
+                _currentDistance = ResolveCurrentStopDistance();
+                _targetStopDistance = ResolveTargetStopDistance();
                 _clockSeconds += 180;
                 break;
         }
@@ -115,8 +122,9 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
         }
 
         _doorOpen = true;
-        _currentDistance = _targetStopDistance;
-        _targetStopDistance += 900;
+        _currentPhase = DebugPhase.Stopped;
+        _currentDistance = ResolveCurrentStopDistance();
+        _targetStopDistance = ResolveTargetStopDistance();
         _clockSeconds += 180;
     }
 
@@ -129,5 +137,69 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
 
         // In debug mode, distance and time should only change via explicit DebugAdvance() calls
         // Not automatically in TickRunning()
+    }
+
+    private static double[] BuildStationStopDisplacements(
+        IReadOnlyList<StationInfo> stations,
+        IReadOnlyDictionary<int, double>? stationDisplacementsMeters)
+    {
+        var result = new double[stations.Count];
+        var last = 0d;
+
+        for (var i = 0; i < stations.Count; i++)
+        {
+            if (stationDisplacementsMeters is not null && stationDisplacementsMeters.TryGetValue(stations[i].Id, out var mapped))
+            {
+                last = mapped;
+                result[i] = mapped;
+                continue;
+            }
+
+            if (i == 0)
+            {
+                result[i] = 0;
+                last = 0;
+            }
+            else
+            {
+                last += FallbackStationSpacingMeters;
+                result[i] = last;
+            }
+        }
+
+        return result;
+    }
+
+    private double ResolveCurrentStopDistance()
+    {
+        return _stationStopDisplacements[Math.Clamp(_currentStationIndex, 0, _stationStopDisplacements.Length - 1)];
+    }
+
+    private double ResolveTargetStopDistance()
+    {
+        var targetIndex = Math.Min(_currentStationIndex + 1, _stationStopDisplacements.Length - 1);
+        return _stationStopDisplacements[targetIndex];
+    }
+
+    private double ResolveApproachingDistance()
+    {
+        var current = ResolveCurrentStopDistance();
+        var target = ResolveTargetStopDistance();
+        var approach = target - DebugApproachRemainingMeters;
+
+        if (approach <= current)
+        {
+            approach = (current + target) / 2;
+        }
+
+        return approach;
+    }
+
+    private double ResolveDepartedDistance()
+    {
+        var current = ResolveCurrentStopDistance();
+        var target = ResolveTargetStopDistance();
+        var departed = current + DebugDepartureAdvanceMeters;
+        return Math.Min(departed, target);
     }
 }

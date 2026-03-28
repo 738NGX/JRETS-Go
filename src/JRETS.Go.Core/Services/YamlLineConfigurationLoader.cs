@@ -43,6 +43,7 @@ public sealed class YamlLineConfigurationLoader : ILineConfigurationLoader
         {
             LineInfo = yaml.LineInfo,
             TrainInfo = yaml.TrainInfo ?? [],
+            MapInfo = yaml.MapInfo,
             // Keep station order exactly as defined in YAML.
             Stations = yaml.Stations
                 .Select(MapStation)
@@ -171,6 +172,8 @@ public sealed class YamlLineConfigurationLoader : ILineConfigurationLoader
         public LineInfo? LineInfo { get; init; }
 
         public List<TrainInfo>? TrainInfo { get; init; }
+
+        public MapInfo? MapInfo { get; init; }
 
         public List<StationInfoYaml>? Stations { get; init; }
     }

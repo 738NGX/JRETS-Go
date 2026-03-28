@@ -4,6 +4,9 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -14,6 +17,7 @@ using System.Windows.Media;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using JRETS.Go.App.Interop;
 using JRETS.Go.Core.Configuration;
 using JRETS.Go.Core.Runtime;
@@ -49,6 +53,7 @@ public partial class MainWindow : Window
     private const int HotKeyMelodyTogglePlayback = 1004;
     private const int HotKeyMelodyCycleSelection = 1005;
     private const int HotKeyToggleReportWindow = 1006;
+    private const int HotKeyToggleMap = 1007;
     private const double MelodyPanelHiddenOffsetX = -340;
     private const double MelodyPanelVisibleOffsetX = 0;
     private static readonly Duration MelodyPanelAnimationDuration = TimeSpan.FromMilliseconds(220);
@@ -97,6 +102,16 @@ public partial class MainWindow : Window
     private readonly List<TrainServiceOption> _serviceOptions = [];
     private readonly Dictionary<string, LinePathMappingEntry> _linePathMappingByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<int> _registeredHotKeys = [];
+    private static readonly HttpClient _osmHttpClient = CreateOsmHttpClient();
+    private readonly Dictionary<string, BitmapImage> _osmTileCache = new(StringComparer.Ordinal);
+
+    private bool _nativeMapBaseLayerVisible = true;
+    private StationMapData[]? _currentMapStations;
+    private RoutePathData? _currentMapRoute;
+    private bool? _mapLastDoorOpen;
+    private int _mapLastCurrentStationId = -1;
+    private int _mapLastNextStationId = -1;
+    private int _mapLastStopStationId = -1;
     
     private ReportViewerWindow? _reportViewerWindow;
 
@@ -183,7 +198,9 @@ public partial class MainWindow : Window
         var loader = new YamlLineConfigurationLoader();
         _lineConfiguration = loader.LoadFromFile(_lineConfigPath);
 
-        _debugDataSource = new DebugRealtimeDataSource(_lineConfiguration.Stations);
+        _debugDataSource = new DebugRealtimeDataSource(
+            _lineConfiguration.Stations,
+            TryLoadDebugStationDisplacementsMeters(_lineConfiguration));
         _displayStateResolver = new DisplayStateResolver();
         _stopScoringService = new StopScoringService(_scoringConfiguration);
         _driveReportExporter = new DriveReportExporter();
@@ -388,6 +405,7 @@ public partial class MainWindow : Window
         RegisterHotKey(HotKeyStartSession, HotKeyModifiers.NoRepeat, 0x78); // F9
         RegisterHotKey(HotKeyEndSession, HotKeyModifiers.NoRepeat, 0x79); // F10
         RegisterHotKey(HotKeyToggleClickThrough, HotKeyModifiers.NoRepeat, 0x76); // F7
+        RegisterHotKey(HotKeyToggleMap, HotKeyModifiers.NoRepeat, 0x75); // F6
         RegisterHotKey(HotKeyMelodyTogglePlayback, HotKeyModifiers.NoRepeat, 0x73); // F4
         RegisterHotKey(HotKeyMelodyCycleSelection, HotKeyModifiers.NoRepeat, 0x09); // Tab
         RegisterHotKey(HotKeyToggleReportWindow, HotKeyModifiers.NoRepeat, 0x77); // F8
@@ -444,6 +462,10 @@ public partial class MainWindow : Window
                 break;
             case HotKeyToggleReportWindow:
                 ToggleReportWindow();
+                handled = true;
+                break;
+            case HotKeyToggleMap:
+                _ = ToggleMapBaseLayerAsync();
                 handled = true;
                 break;
         }
@@ -768,6 +790,9 @@ public partial class MainWindow : Window
         SetClickThroughMode(enabled: true);
         AnimateControlPanel(show: false);
 
+        // Initialize map if available (fire and forget)
+        _ = InitializeMapAsync();
+
         UpdateDisplay();
     }
 
@@ -801,6 +826,9 @@ public partial class MainWindow : Window
         StopApproachRealtimeUpdateTimer();
         HideApproachPanel(immediate: true);
         CloseMelodySelectionPanel();
+
+        // Clear map
+        _ = ClearMapAsync();
 
         SetClickThroughMode(enabled: false);
         AnimateControlPanel(show: true);
@@ -1002,6 +1030,7 @@ public partial class MainWindow : Window
             : $"Info: {_lastDataSourceError}";
 
         UpdateMemoryDebugText(snapshot);
+        RequestMapRender(snapshot, state);
     }
 
     private bool TryGetHudStatusMessage(out string message)
@@ -2265,13 +2294,60 @@ public partial class MainWindow : Window
         _lineConfigPath = option.FilePath;
         _lineConfiguration = option.Configuration;
         _hudStatusMessage = null;
-        _debugDataSource = new DebugRealtimeDataSource(_lineConfiguration.Stations);
+        _debugDataSource = new DebugRealtimeDataSource(
+            _lineConfiguration.Stations,
+            TryLoadDebugStationDisplacementsMeters(_lineConfiguration));
         _timelineInitialized = false;
         PopulateServiceOptions();
 
         if (_sessionRunning && !_usingLiveMemory)
         {
             _debugDataSource.StartSession();
+        }
+    }
+
+    private IReadOnlyDictionary<int, double>? TryLoadDebugStationDisplacementsMeters(LineConfiguration lineConfiguration)
+    {
+        try
+        {
+            if (lineConfiguration.MapInfo is null || string.IsNullOrWhiteSpace(lineConfiguration.MapInfo.Stations))
+            {
+                return null;
+            }
+
+            var filePath = Path.Combine(AppContext.BaseDirectory, "configs", "map", lineConfiguration.MapInfo.Stations);
+            if (!File.Exists(filePath))
+            {
+                return null;
+            }
+
+            var json = File.ReadAllText(filePath);
+            var dict = JsonSerializer.Deserialize<Dictionary<string, StationMapDataJson>>(
+                json,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            if (dict is null || dict.Count == 0)
+            {
+                return null;
+            }
+
+            // Displacement in map config is kilometers; convert to meters for runtime snapshot.
+            var result = new Dictionary<int, double>();
+            foreach (var (stationIdText, value) in dict)
+            {
+                if (int.TryParse(stationIdText, out var stationId))
+                {
+                    result[stationId] = value.Displacement * 1000.0;
+                }
+            }
+
+            return result.Count == 0 ? null : result;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -3193,4 +3269,815 @@ public partial class MainWindow : Window
 
         public required Visibility StationMarkerVisibility { get; init; }
     }
+
+    // ==================== Map Related ====================
+
+    private async Task InitializeMapAsync()
+    {
+        try
+        {
+            if (_lineConfiguration?.MapInfo == null)
+            {
+                SetMapStatus("MAP: OFF");
+                MiniMapPanel.Visibility = Visibility.Visible;
+                ClearNativeMap();
+                return;
+            }
+
+            // Load map data from configs/map
+            string mapDir = Path.Combine("configs", "map");
+            string stationsPath = Path.Combine(mapDir, _lineConfiguration.MapInfo.Stations);
+            string routePath = Path.Combine(mapDir, _lineConfiguration.MapInfo.Route);
+
+            _currentMapStations = await LoadStationMapDataAsync(stationsPath);
+            _currentMapRoute = await LoadRouteDataAsync(routePath);
+
+            if (_currentMapStations != null && _currentMapRoute != null)
+            {
+                await RenderMapAsync();
+                MiniMapPanel.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                _lastDataSourceError = "Map data load failed: station/route json not found or invalid.";
+                SetMapStatus("MAP: DATA ERR");
+                MiniMapPanel.Visibility = Visibility.Visible;
+                ClearNativeMap();
+            }
+        }
+        catch
+        {
+            _lastDataSourceError = "Map initialization failed.";
+            SetMapStatus("MAP: INIT ERR");
+            MiniMapPanel.Visibility = Visibility.Visible;
+            ClearNativeMap();
+        }
+    }
+
+    private async Task<StationMapData[]?> LoadStationMapDataAsync(string filePath)
+    {
+        try
+        {
+            var fullPath = Path.Combine(AppContext.BaseDirectory, filePath);
+            if (!File.Exists(fullPath))
+            {
+                return null;
+            }
+
+            string json = await File.ReadAllTextAsync(fullPath);
+            var dict = JsonSerializer.Deserialize<Dictionary<string, StationMapDataJson>>(
+                json,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+            if (dict == null) return null;
+
+            return dict.Select(x => new StationMapData
+            {
+                Id = int.TryParse(x.Key, out var parsedId) ? parsedId : x.Value.Id,
+                Displacement = x.Value.Displacement,
+                Coordinates = x.Value.Coordinates
+            })
+            .OrderBy(x => x.Displacement)
+            .ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<RoutePathData?> LoadRouteDataAsync(string filePath)
+    {
+        try
+        {
+            var fullPath = Path.Combine(AppContext.BaseDirectory, filePath);
+            if (!File.Exists(fullPath))
+            {
+                return null;
+            }
+
+            string json = await File.ReadAllTextAsync(fullPath);
+            var dict = JsonSerializer.Deserialize<Dictionary<string, double[]>>(json);
+
+            if (dict == null) return null;
+
+            var routeData = new RoutePathData
+            {
+                RoutePoints = dict
+                    .Select(x => new
+                    {
+                        Distance = double.Parse(x.Key, CultureInfo.InvariantCulture),
+                        Coordinates = x.Value
+                    })
+                    .OrderBy(x => x.Distance)
+                    .ToDictionary(x => x.Distance, x => x.Coordinates)
+            };
+
+            return routeData;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task RenderMapAsync()
+    {
+        await RenderMapAsync(null, null, force: true);
+    }
+
+    private async Task RenderMapAsync(RealtimeSnapshot? snapshot, TrainDisplayState? state, bool force)
+    {
+        if (_currentMapStations == null || _currentMapRoute == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var routeCoords = _currentMapRoute.RoutePoints
+                .OrderBy(x => x.Key)
+                .Select(x => new RoutePointEntry { DistanceKm = x.Key, Coordinates = x.Value })
+                .ToArray();
+
+            var fullLineCoords = routeCoords
+                .Select(x => x.Coordinates)
+                .Where(x => x.Length >= 2)
+                .ToArray();
+
+            var stationCoords = _currentMapStations
+                .Where(s => s.Coordinates.Length >= 2)
+                .Select(s => s.Coordinates)
+                .ToArray();
+
+            var mapStationsById = _currentMapStations.ToDictionary(x => x.Id, x => x);
+
+            var runningFocus = false;
+            StationMapData? runningFrom = null;
+            StationMapData? runningTo = null;
+            int? highlightedStopStationId = null;
+
+            if (_sessionRunning && snapshot is not null && state is not null)
+            {
+                if (snapshot.DoorOpen && state.CurrentStopStation is not null)
+                {
+                    highlightedStopStationId = state.CurrentStopStation.Id;
+                }
+                else if (!snapshot.DoorOpen && state.NextStation is not null)
+                {
+                    if (mapStationsById.TryGetValue(snapshot.NextStationId, out var fromStation)
+                        && mapStationsById.TryGetValue(state.NextStation.Id, out var toStation)
+                        && fromStation.Id != toStation.Id)
+                    {
+                        runningFocus = true;
+                        runningFrom = fromStation;
+                        runningTo = toStation;
+                    }
+                }
+            }
+
+            double[][] displayRouteCoords;
+            MiniMapViewport viewport;
+
+            if (runningFocus && runningFrom is not null && runningTo is not null)
+            {
+                var minLng = Math.Min(runningFrom.Coordinates[0], runningTo.Coordinates[0]);
+                var maxLng = Math.Max(runningFrom.Coordinates[0], runningTo.Coordinates[0]);
+                var minLat = Math.Min(runningFrom.Coordinates[1], runningTo.Coordinates[1]);
+                var maxLat = Math.Max(runningFrom.Coordinates[1], runningTo.Coordinates[1]);
+                const double focusMarginDegrees = 0.018;
+
+                var focusCoords = fullLineCoords
+                    .Where(c =>
+                        c[0] >= minLng - focusMarginDegrees && c[0] <= maxLng + focusMarginDegrees
+                        && c[1] >= minLat - focusMarginDegrees && c[1] <= maxLat + focusMarginDegrees)
+                    .ToArray();
+
+                if (focusCoords.Length < 2)
+                {
+                    focusCoords =
+                    [
+                        runningFrom.Coordinates,
+                        runningTo.Coordinates
+                    ];
+                }
+
+                var width = MiniMapCanvas.ActualWidth > 1 ? MiniMapCanvas.ActualWidth : 400;
+                var height = MiniMapCanvas.ActualHeight > 1 ? MiniMapCanvas.ActualHeight : 300;
+                const double padding = 18;
+                var centerLng = (runningFrom.Coordinates[0] + runningTo.Coordinates[0]) / 2.0;
+                var centerLat = (runningFrom.Coordinates[1] + runningTo.Coordinates[1]) / 2.0;
+                viewport = BuildFocusedMiniMapViewport(focusCoords, width, height, padding, centerLng, centerLat, 0.5);
+                displayRouteCoords = fullLineCoords.Length >= 2 ? fullLineCoords : stationCoords;
+            }
+            else
+            {
+                displayRouteCoords = fullLineCoords.Length >= 2 ? fullLineCoords : stationCoords;
+
+                var allCoords = routeCoords
+                    .Select(x => x.Coordinates)
+                    .Concat(stationCoords)
+                    .Where(c => c.Length >= 2)
+                    .ToArray();
+
+                if (allCoords.Length == 0)
+                {
+                    SetMapStatus("MAP: EMPTY");
+                    ClearNativeMap();
+                    return;
+                }
+
+                var width = MiniMapCanvas.ActualWidth > 1 ? MiniMapCanvas.ActualWidth : 400;
+                var height = MiniMapCanvas.ActualHeight > 1 ? MiniMapCanvas.ActualHeight : 300;
+                const double padding = 12;
+                viewport = BuildMiniMapViewport(allCoords, width, height, padding);
+            }
+
+            if (displayRouteCoords.Length == 0)
+            {
+                SetMapStatus("MAP: EMPTY");
+                ClearNativeMap();
+                return;
+            }
+
+            ClearNativeMap();
+
+            if (_nativeMapBaseLayerVisible)
+            {
+                var tileCount = await DrawOsmTilesAsync(viewport);
+                if (tileCount == 0)
+                {
+                    DrawNativeMapGrid(viewport.Width, viewport.Height);
+                }
+            }
+
+            var lineColor = (Color)ColorConverter.ConvertFromString(_lineConfiguration?.LineInfo.LineColor ?? "#00B2E5");
+            var lineBrush = new SolidColorBrush(lineColor);
+
+            if (displayRouteCoords.Length > 1)
+            {
+                var projectedRoute = new List<Point>(displayRouteCoords.Length);
+                foreach (var coord in displayRouteCoords)
+                {
+                    if (coord.Length < 2)
+                    {
+                        continue;
+                    }
+
+                    projectedRoute.Add(ProjectToMiniMap(coord[0], coord[1], viewport));
+                }
+
+                var sanitizedRoute = SanitizeRoutePoints(projectedRoute);
+                var smoothedRoute = SmoothPolylineChaikin(sanitizedRoute, iterations: 2);
+
+                var polyline = new System.Windows.Shapes.Polyline
+                {
+                    Stroke = lineBrush,
+                    StrokeThickness = 3,
+                    StrokeLineJoin = PenLineJoin.Round,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    Opacity = 0.9
+                };
+
+                foreach (var p in smoothedRoute)
+                {
+                    polyline.Points.Add(p);
+                }
+
+                MiniMapCanvas.Children.Add(polyline);
+            }
+
+            var stationsToDraw = runningFocus && runningFrom is not null && runningTo is not null
+                ? new[] { runningFrom, runningTo }
+                : _currentMapStations;
+
+            foreach (var station in stationsToDraw)
+            {
+                if (station.Coordinates.Length < 2)
+                {
+                    continue;
+                }
+
+                var p = ProjectToMiniMap(station.Coordinates[0], station.Coordinates[1], viewport);
+                var isHighlighted = highlightedStopStationId.HasValue && station.Id == highlightedStopStationId.Value;
+                var dot = new System.Windows.Shapes.Ellipse
+                {
+                    Width = isHighlighted ? 11 : 7,
+                    Height = isHighlighted ? 11 : 7,
+                    Fill = isHighlighted ? Brushes.Red : lineBrush,
+                    Stroke = Brushes.White,
+                    StrokeThickness = isHighlighted ? 2.0 : 1.5
+                };
+
+                Canvas.SetLeft(dot, p.X - dot.Width / 2);
+                Canvas.SetTop(dot, p.Y - dot.Height / 2);
+                MiniMapCanvas.Children.Add(dot);
+            }
+
+            var baseState = _nativeMapBaseLayerVisible ? "DARK ON" : "BASE OFF";
+            var mode = runningFocus ? "RUN FOCUS" : "FULL";
+            SetMapStatus($"MAP: NATIVE | {baseState} | {mode} | ROUTE OK | STN OK");
+        }
+        catch
+        {
+            _lastDataSourceError = "Map render failed: native draw error.";
+            SetMapStatus("MAP: RENDER ERR");
+            MiniMapPanel.Visibility = Visibility.Visible;
+        }
+    }
+
+    private async Task ToggleMapBaseLayerAsync()
+    {
+        _nativeMapBaseLayerVisible = !_nativeMapBaseLayerVisible;
+        _mapLastDoorOpen = null;
+        _mapLastCurrentStationId = -1;
+        _mapLastNextStationId = -1;
+        _mapLastStopStationId = -1;
+        await RenderMapAsync(_latestApproachSnapshot, _latestApproachState, force: true);
+    }
+
+    private async Task ClearMapAsync()
+    {
+        ClearNativeMap();
+        _mapLastDoorOpen = null;
+        _mapLastCurrentStationId = -1;
+        _mapLastNextStationId = -1;
+        _mapLastStopStationId = -1;
+        SetMapStatus("MAP: CLEARED");
+        await Task.CompletedTask;
+    }
+
+    private void RequestMapRender(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        if (_currentMapStations is null || _currentMapRoute is null)
+        {
+            return;
+        }
+
+        var currentId = snapshot.NextStationId;
+        var nextId = state.NextStation?.Id ?? -1;
+        var stopId = state.CurrentStopStation?.Id ?? -1;
+
+        if (_mapLastDoorOpen == snapshot.DoorOpen
+            && _mapLastCurrentStationId == currentId
+            && _mapLastNextStationId == nextId
+            && _mapLastStopStationId == stopId)
+        {
+            return;
+        }
+
+        _mapLastDoorOpen = snapshot.DoorOpen;
+        _mapLastCurrentStationId = currentId;
+        _mapLastNextStationId = nextId;
+        _mapLastStopStationId = stopId;
+
+        _ = RenderMapAsync(snapshot, state, force: false);
+    }
+
+    private void SetMapStatus(string status)
+    {
+        if (MapStatusTextBlock is not null)
+        {
+            MapStatusTextBlock.Text = status;
+        }
+    }
+
+    private void ClearNativeMap()
+    {
+        MiniMapCanvas.Children.Clear();
+    }
+
+    private void DrawNativeMapGrid(double width, double height)
+    {
+        var gridBrush = new SolidColorBrush(Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF));
+        const double step = 32;
+
+        for (var x = 0.0; x <= width; x += step)
+        {
+            var v = new System.Windows.Shapes.Line
+            {
+                X1 = x,
+                Y1 = 0,
+                X2 = x,
+                Y2 = height,
+                Stroke = gridBrush,
+                StrokeThickness = 1
+            };
+            MiniMapCanvas.Children.Add(v);
+        }
+
+        for (var y = 0.0; y <= height; y += step)
+        {
+            var h = new System.Windows.Shapes.Line
+            {
+                X1 = 0,
+                Y1 = y,
+                X2 = width,
+                Y2 = y,
+                Stroke = gridBrush,
+                StrokeThickness = 1
+            };
+            MiniMapCanvas.Children.Add(h);
+        }
+    }
+
+    private async Task<int> DrawOsmTilesAsync(MiniMapViewport viewport)
+    {
+        var tileMinX = Math.Max(0, (int)Math.Floor(viewport.MinWorldX / 256.0) - 1);
+        var tileMaxX = Math.Min((1 << viewport.Zoom) - 1, (int)Math.Floor(viewport.MaxWorldX / 256.0) + 1);
+        var tileMinY = Math.Max(0, (int)Math.Floor(viewport.MinWorldY / 256.0) - 1);
+        var tileMaxY = Math.Min((1 << viewport.Zoom) - 1, (int)Math.Floor(viewport.MaxWorldY / 256.0) + 1);
+
+        var requests = new List<(int X, int Y)>();
+        for (var ty = tileMinY; ty <= tileMaxY; ty++)
+        {
+            for (var tx = tileMinX; tx <= tileMaxX; tx++)
+            {
+                requests.Add((tx, ty));
+            }
+        }
+
+        var fetchTasks = requests.Select(async req => (req, image: await GetOsmTileAsync(viewport.Zoom, req.X, req.Y))).ToArray();
+        var fetched = await Task.WhenAll(fetchTasks);
+
+        var count = 0;
+        foreach (var item in fetched)
+        {
+            if (item.image is null)
+            {
+                continue;
+            }
+
+            var tileWorldX = item.req.X * 256.0;
+            var tileWorldY = item.req.Y * 256.0;
+            var screenX = viewport.OffsetX + (tileWorldX - viewport.MinWorldX) * viewport.Scale;
+            var screenY = viewport.OffsetY + (tileWorldY - viewport.MinWorldY) * viewport.Scale;
+            var screenSize = 256.0 * viewport.Scale;
+
+            var imageControl = new Image
+            {
+                Source = item.image,
+                Width = screenSize,
+                Height = screenSize,
+                Opacity = 1.0,
+                Stretch = Stretch.Fill
+            };
+
+            Canvas.SetLeft(imageControl, screenX);
+            Canvas.SetTop(imageControl, screenY);
+            MiniMapCanvas.Children.Add(imageControl);
+            count++;
+        }
+
+        return count;
+    }
+
+    private async Task<BitmapImage?> GetOsmTileAsync(int zoom, int tileX, int tileY)
+    {
+        var key = $"dark/{zoom}/{tileX}/{tileY}";
+        if (_osmTileCache.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        try
+        {
+            var subdomain = ((tileX + tileY) % 4) switch
+            {
+                0 => "a",
+                1 => "b",
+                2 => "c",
+                _ => "d"
+            };
+            var url = $"https://{subdomain}.basemaps.cartocdn.com/dark_all/{zoom}/{tileX}/{tileY}.png";
+            using var response = await _osmHttpClient.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            using var stream = new MemoryStream(bytes);
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream;
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            _osmTileCache[key] = bitmap;
+            return bitmap;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static MiniMapViewport BuildMiniMapViewport(double[][] coords, double width, double height, double padding)
+    {
+        var minLng = coords.Min(c => c[0]);
+        var maxLng = coords.Max(c => c[0]);
+        var minLat = coords.Min(c => c[1]);
+        var maxLat = coords.Max(c => c[1]);
+
+        var lngPad = Math.Max((maxLng - minLng) * 0.08, 0.0001);
+        var latPad = Math.Max((maxLat - minLat) * 0.08, 0.0001);
+        minLng -= lngPad;
+        maxLng += lngPad;
+        minLat -= latPad;
+        maxLat += latPad;
+
+        var zoom = ChooseOsmZoom(minLng, maxLng, minLat, maxLat, width, height);
+
+        var minWorldX = LonToWorldX(minLng, zoom);
+        var maxWorldX = LonToWorldX(maxLng, zoom);
+        var minWorldY = LatToWorldY(maxLat, zoom);
+        var maxWorldY = LatToWorldY(minLat, zoom);
+
+        var drawWidth = Math.Max(1, width - padding * 2);
+        var drawHeight = Math.Max(1, height - padding * 2);
+        var worldWidth = Math.Max(1e-9, maxWorldX - minWorldX);
+        var worldHeight = Math.Max(1e-9, maxWorldY - minWorldY);
+        var scale = Math.Min(drawWidth / worldWidth, drawHeight / worldHeight);
+        var scaledWidth = worldWidth * scale;
+        var scaledHeight = worldHeight * scale;
+        var offsetX = padding + (drawWidth - scaledWidth) / 2;
+        var offsetY = padding + (drawHeight - scaledHeight) / 2;
+
+        return new MiniMapViewport
+        {
+            Width = width,
+            Height = height,
+            Zoom = zoom,
+            MinWorldX = minWorldX,
+            MaxWorldX = maxWorldX,
+            MinWorldY = minWorldY,
+            MaxWorldY = maxWorldY,
+            Scale = scale,
+            OffsetX = offsetX,
+            OffsetY = offsetY
+        };
+    }
+
+    private static MiniMapViewport BuildFocusedMiniMapViewport(
+        double[][] coords,
+        double width,
+        double height,
+        double padding,
+        double centerLng,
+        double centerLat,
+        double focusScale)
+    {
+        var baseViewport = BuildMiniMapViewport(coords, width, height, padding);
+
+        var drawWidth = Math.Max(1, width - padding * 2);
+        var drawHeight = Math.Max(1, height - padding * 2);
+        var worldWidth = Math.Max(1e-9, baseViewport.MaxWorldX - baseViewport.MinWorldX);
+        var worldHeight = Math.Max(1e-9, baseViewport.MaxWorldY - baseViewport.MinWorldY);
+        var centerWorldX = LonToWorldX(centerLng, baseViewport.Zoom);
+        var centerWorldY = LatToWorldY(centerLat, baseViewport.Zoom);
+
+        var halfW = worldWidth * Math.Max(0.45, focusScale) / 2.0;
+        var halfH = worldHeight * Math.Max(0.45, focusScale) / 2.0;
+        var aspect = drawWidth / drawHeight;
+        if (halfW / halfH > aspect)
+        {
+            halfH = halfW / aspect;
+        }
+        else
+        {
+            halfW = halfH * aspect;
+        }
+
+        var minWorldX = centerWorldX - halfW;
+        var maxWorldX = centerWorldX + halfW;
+        var minWorldY = centerWorldY - halfH;
+        var maxWorldY = centerWorldY + halfH;
+
+        var scale = Math.Min(drawWidth / Math.Max(1e-9, maxWorldX - minWorldX), drawHeight / Math.Max(1e-9, maxWorldY - minWorldY));
+        var scaledWidth = (maxWorldX - minWorldX) * scale;
+        var scaledHeight = (maxWorldY - minWorldY) * scale;
+        var offsetX = padding + (drawWidth - scaledWidth) / 2;
+        var offsetY = padding + (drawHeight - scaledHeight) / 2;
+
+        return new MiniMapViewport
+        {
+            Width = width,
+            Height = height,
+            Zoom = baseViewport.Zoom,
+            MinWorldX = minWorldX,
+            MaxWorldX = maxWorldX,
+            MinWorldY = minWorldY,
+            MaxWorldY = maxWorldY,
+            Scale = scale,
+            OffsetX = offsetX,
+            OffsetY = offsetY
+        };
+    }
+
+    private static int ChooseOsmZoom(double minLng, double maxLng, double minLat, double maxLat, double width, double height)
+    {
+        var lonSpan = Math.Max(1e-7, maxLng - minLng);
+        var y1 = LatToMercatorNormalized(maxLat);
+        var y2 = LatToMercatorNormalized(minLat);
+        var latSpan = Math.Max(1e-7, Math.Abs(y2 - y1));
+
+        var zoomX = Math.Log(Math.Max(1.0, width) * 360.0 / (256.0 * lonSpan), 2);
+        var zoomY = Math.Log(Math.Max(1.0, height) / (256.0 * latSpan), 2);
+        var zoom = (int)Math.Floor(Math.Min(zoomX, zoomY));
+        return Math.Clamp(zoom, 5, 15);
+    }
+
+    private static Point ProjectToMiniMap(double lng, double lat, MiniMapViewport viewport)
+    {
+        var worldX = LonToWorldX(lng, viewport.Zoom);
+        var worldY = LatToWorldY(lat, viewport.Zoom);
+        var x = viewport.OffsetX + (worldX - viewport.MinWorldX) * viewport.Scale;
+        var y = viewport.OffsetY + (worldY - viewport.MinWorldY) * viewport.Scale;
+        return new Point(x, y);
+    }
+
+    private static IReadOnlyList<Point> SanitizeRoutePoints(IReadOnlyList<Point> input)
+    {
+        if (input.Count <= 2)
+        {
+            return input;
+        }
+
+        var deduped = new List<Point>(input.Count);
+        deduped.Add(input[0]);
+
+        for (var i = 1; i < input.Count; i++)
+        {
+            if (Distance(input[i], deduped[^1]) >= 1.0)
+            {
+                deduped.Add(input[i]);
+            }
+        }
+
+        // Guard against accidental closure artifacts.
+        if (deduped.Count > 3 && Distance(deduped[0], deduped[^1]) < 2.0)
+        {
+            deduped.RemoveAt(deduped.Count - 1);
+        }
+
+        // Remove tiny backtracking spikes that visually look like a loop.
+        var cleaned = new List<Point>(deduped.Count);
+        cleaned.Add(deduped[0]);
+        for (var i = 1; i < deduped.Count - 1; i++)
+        {
+            var prev = cleaned[^1];
+            var curr = deduped[i];
+            var next = deduped[i + 1];
+
+            var prevToCurr = Distance(prev, curr);
+            var currToNext = Distance(curr, next);
+            var prevToNext = Distance(prev, next);
+            var tinySpike = prevToCurr < 10.0 && currToNext < 10.0 && prevToNext < 8.0;
+
+            if (!tinySpike)
+            {
+                cleaned.Add(curr);
+            }
+        }
+
+        cleaned.Add(deduped[^1]);
+        return cleaned;
+    }
+
+    private static IReadOnlyList<Point> SmoothPolylineChaikin(IReadOnlyList<Point> points, int iterations)
+    {
+        if (points.Count < 3 || iterations <= 0)
+        {
+            return points;
+        }
+
+        var current = points.ToList();
+        for (var iter = 0; iter < iterations; iter++)
+        {
+            if (current.Count < 3)
+            {
+                break;
+            }
+
+            var next = new List<Point>(current.Count * 2);
+            next.Add(current[0]);
+
+            for (var i = 0; i < current.Count - 1; i++)
+            {
+                var p0 = current[i];
+                var p1 = current[i + 1];
+
+                var q = new Point(0.75 * p0.X + 0.25 * p1.X, 0.75 * p0.Y + 0.25 * p1.Y);
+                var r = new Point(0.25 * p0.X + 0.75 * p1.X, 0.25 * p0.Y + 0.75 * p1.Y);
+                next.Add(q);
+                next.Add(r);
+            }
+
+            next.Add(current[^1]);
+            current = next;
+        }
+
+        return current;
+    }
+
+    private static double Distance(Point a, Point b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static double LonToWorldX(double lon, int zoom)
+    {
+        var n = 256.0 * (1 << zoom);
+        return (lon + 180.0) / 360.0 * n;
+    }
+
+    private static double LatToWorldY(double lat, int zoom)
+    {
+        var clamped = Math.Clamp(lat, -85.05112878, 85.05112878);
+        var rad = clamped * Math.PI / 180.0;
+        var merc = Math.Log(Math.Tan(Math.PI / 4.0 + rad / 2.0));
+        var n = 256.0 * (1 << zoom);
+        return (1.0 - merc / Math.PI) / 2.0 * n;
+    }
+
+    private static double LatToMercatorNormalized(double lat)
+    {
+        var clamped = Math.Clamp(lat, -85.05112878, 85.05112878);
+        var rad = clamped * Math.PI / 180.0;
+        var merc = Math.Log(Math.Tan(Math.PI / 4.0 + rad / 2.0));
+        return (1.0 - merc / Math.PI) / 2.0;
+    }
+
+    private static HttpClient CreateOsmHttpClient()
+    {
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(8)
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("JRETS-Go/1.0");
+        return client;
+    }
+
+    private class StationMapDataJson
+    {
+        [JsonIgnore]
+        public int Id { get; set; }
+
+        [JsonPropertyName("displacement")]
+        public double Displacement { get; set; }
+
+        [JsonPropertyName("coordinates")]
+        public double[] Coordinates { get; set; } = [];
+    }
+
+    private class StationMapData
+    {
+        public int Id { get; set; }
+        public double Displacement { get; set; }
+        public double[] Coordinates { get; set; } = [];
+    }
+
+    private class RoutePathData
+    {
+        public Dictionary<double, double[]> RoutePoints { get; set; } = [];     
+    }
+
+    private sealed class RoutePointEntry
+    {
+        public required double DistanceKm { get; init; }
+
+        public required double[] Coordinates { get; init; }
+    }
+
+    private sealed class MiniMapViewport
+    {
+        public required double Width { get; init; }
+
+        public required double Height { get; init; }
+
+        public required int Zoom { get; init; }
+
+        public required double MinWorldX { get; init; }
+
+        public required double MaxWorldX { get; init; }
+
+        public required double MinWorldY { get; init; }
+
+        public required double MaxWorldY { get; init; }
+
+        public required double Scale { get; init; }
+
+        public required double OffsetX { get; init; }
+
+        public required double OffsetY { get; init; }
+    }
+
 }

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Railway Map</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+            background-color: #1a1a1a;
+        }
+        
+        .leaflet-container {
+            background: #1a1a1a !important;
+        }
+        
+        /* 暗色主题 */
+        .leaflet-tile {
+            filter: brightness(0.85) contrast(1.1);
+        }
+        
+        .leaflet-control-attribution {
+            background-color: rgba(30, 30, 30, 0.7) !important;
+            color: #aaa !important;
+            font-size: 10px !important;
+        }
+        
+        .leaflet-control-attribution a {
+            color: #88ccff !important;
+        }
+        
+        /* 路线样式 */
+        .route-polyline {
+            opacity: 0.85;
+            lineCap: "round";
+            lineJoin: "round";
+        }
+        
+        /* 車站標記 */
+        .station-marker {
+            width: 10px !important;
+            height: 10px !important;
+            border: 2px solid white;
+            border-radius: 50%;
+            margin-left: -5px !important;
+            margin-top: -5px !important;
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+        }
+        
+        .station-label {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            font-size: 11px;
+            color: #fff;
+            text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+            margin-top: -20px;
+        }
+        
+        /* 當前列車位置 */
+        .train-position {
+            width: 14px !important;
+            height: 14px !important;
+            margin-left: -7px !important;
+            margin-top: -7px !important;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <script>
+        let map = null;
+        let routeLayer = null;
+        let stationLayer = null;
+        let trainMarker = null;
+        let baseLayer = null;
+        let baseLayerVisible = true;
+        let routePolyline = null;
+        let mapBounds = null;
+
+        let fallbackMode = false;
+        let fallbackRouteCoords = [];
+        let fallbackStations = [];
+        let fallbackLineColor = '#00B2E5';
+        let fallbackBaseLayer = null;
+        let fallbackSvg = null;
+        let fallbackTrain = null;
+        let mapEngine = 'INIT';
+        
+        function hasLeaflet() {
+            return typeof window.L !== 'undefined' && typeof L.map === 'function';
+        }
+
+        function setupFallbackCanvas() {
+            const mapElement = document.getElementById('map');
+            mapElement.innerHTML = '';
+
+            const container = document.createElement('div');
+            container.style.position = 'relative';
+            container.style.width = '100%';
+            container.style.height = '100%';
+            container.style.overflow = 'hidden';
+            mapElement.appendChild(container);
+
+            fallbackBaseLayer = document.createElement('div');
+            fallbackBaseLayer.style.position = 'absolute';
+            fallbackBaseLayer.style.inset = '0';
+            fallbackBaseLayer.style.background =
+                'linear-gradient(0deg, rgba(255,255,255,0.04) 1px, transparent 1px), ' +
+                'linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px), ' +
+                'linear-gradient(180deg, #1a1a1a 0%, #111 100%)';
+            fallbackBaseLayer.style.backgroundSize = '32px 32px, 32px 32px, 100% 100%';
+            container.appendChild(fallbackBaseLayer);
+
+            fallbackSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            fallbackSvg.setAttribute('width', '100%');
+            fallbackSvg.setAttribute('height', '100%');
+            fallbackSvg.style.position = 'absolute';
+            fallbackSvg.style.inset = '0';
+            container.appendChild(fallbackSvg);
+        }
+
+        function projectPoint(lng, lat, bounds, width, height, padding) {
+            const usableWidth = Math.max(1, width - padding * 2);
+            const usableHeight = Math.max(1, height - padding * 2);
+            const dx = Math.max(1e-9, bounds.maxLng - bounds.minLng);
+            const dy = Math.max(1e-9, bounds.maxLat - bounds.minLat);
+            const nx = (lng - bounds.minLng) / dx;
+            const ny = (bounds.maxLat - lat) / dy;
+            return {
+                x: padding + nx * usableWidth,
+                y: padding + ny * usableHeight
+            };
+        }
+
+        function buildBounds() {
+            let minLng = Infinity;
+            let maxLng = -Infinity;
+            let minLat = Infinity;
+            let maxLat = -Infinity;
+
+            fallbackRouteCoords.forEach(c => {
+                if (!Array.isArray(c) || c.length < 2) return;
+                const lng = c[0];
+                const lat = c[1];
+                if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+                minLng = Math.min(minLng, lng);
+                maxLng = Math.max(maxLng, lng);
+                minLat = Math.min(minLat, lat);
+                maxLat = Math.max(maxLat, lat);
+            });
+
+            fallbackStations.forEach(s => {
+                if (!Number.isFinite(s.lng) || !Number.isFinite(s.lat)) return;
+                minLng = Math.min(minLng, s.lng);
+                maxLng = Math.max(maxLng, s.lng);
+                minLat = Math.min(minLat, s.lat);
+                maxLat = Math.max(maxLat, s.lat);
+            });
+
+            if (!Number.isFinite(minLng) || !Number.isFinite(maxLng) || !Number.isFinite(minLat) || !Number.isFinite(maxLat)) {
+                return null;
+            }
+
+            const padLng = (maxLng - minLng) * 0.08;
+            const padLat = (maxLat - minLat) * 0.08;
+            return {
+                minLng: minLng - padLng,
+                maxLng: maxLng + padLng,
+                minLat: minLat - padLat,
+                maxLat: maxLat + padLat
+            };
+        }
+
+        function clearFallbackSvg() {
+            if (!fallbackSvg) return;
+            while (fallbackSvg.firstChild) {
+                fallbackSvg.removeChild(fallbackSvg.firstChild);
+            }
+        }
+
+        function renderFallback() {
+            if (!fallbackMode || !fallbackSvg) return;
+            clearFallbackSvg();
+
+            const rect = document.getElementById('map').getBoundingClientRect();
+            const width = Math.max(1, rect.width);
+            const height = Math.max(1, rect.height);
+            const bounds = buildBounds();
+            if (!bounds) return;
+
+            const padding = 16;
+
+            if (fallbackRouteCoords.length > 1) {
+                const points = fallbackRouteCoords
+                    .filter(c => Array.isArray(c) && c.length >= 2)
+                    .map(c => projectPoint(c[0], c[1], bounds, width, height, padding))
+                    .map(p => `${p.x},${p.y}`)
+                    .join(' ');
+
+                const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                polyline.setAttribute('points', points);
+                polyline.setAttribute('fill', 'none');
+                polyline.setAttribute('stroke', fallbackLineColor);
+                polyline.setAttribute('stroke-width', '4');
+                polyline.setAttribute('stroke-linecap', 'round');
+                polyline.setAttribute('stroke-linejoin', 'round');
+                polyline.setAttribute('opacity', '0.9');
+                fallbackSvg.appendChild(polyline);
+            }
+
+            fallbackStations.forEach(s => {
+                const p = projectPoint(s.lng, s.lat, bounds, width, height, padding);
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', `${p.x}`);
+                circle.setAttribute('cy', `${p.y}`);
+                circle.setAttribute('r', '3.8');
+                circle.setAttribute('fill', fallbackLineColor);
+                circle.setAttribute('stroke', '#fff');
+                circle.setAttribute('stroke-width', '1.5');
+                fallbackSvg.appendChild(circle);
+            });
+
+            if (fallbackTrain && Number.isFinite(fallbackTrain.lng) && Number.isFinite(fallbackTrain.lat)) {
+                const p = projectPoint(fallbackTrain.lng, fallbackTrain.lat, bounds, width, height, padding);
+                const train = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                train.setAttribute('cx', `${p.x}`);
+                train.setAttribute('cy', `${p.y}`);
+                train.setAttribute('r', '5');
+                train.setAttribute('fill', fallbackTrain.color || fallbackLineColor);
+                train.setAttribute('stroke', '#fff');
+                train.setAttribute('stroke-width', '2');
+                fallbackSvg.appendChild(train);
+            }
+        }
+
+        // 初始化地圖
+        window.initMap = function(config) {
+            if (!hasLeaflet()) {
+                fallbackMode = true;
+                mapEngine = 'FALLBACK';
+                setupFallbackCanvas();
+                renderFallback();
+                return;
+            }
+
+            fallbackMode = false;
+            mapEngine = 'LEAFLET';
+            if (map !== null) {
+                map.remove();
+            }
+
+            map = L.map('map', {
+                center: [config.lat, config.lng],
+                zoom: config.zoom,
+                zoomControl: true,
+                attributionControl: true
+            });
+
+            // 添加 OSM 底圖（暗色效果）
+            baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18,
+                className: 'osm-tiles'
+            }).addTo(map);
+
+            // 創建圖層組
+            routeLayer = L.featureGroup().addTo(map);
+            stationLayer = L.featureGroup().addTo(map);
+
+            // 禁用雙擊放大縮小（防止誤操作）
+            map.doubleClickZoom.disable();
+        };
+        
+        // 繪製路線
+        window.drawRoute = function(lineColor, routeCoordinates) {
+            if (fallbackMode) {
+                fallbackLineColor = lineColor || '#00B2E5';
+                fallbackRouteCoords = Array.isArray(routeCoordinates) ? routeCoordinates : [];
+                renderFallback();
+                return;
+            }
+
+            if (routeLayer === null) return;
+            
+            routeLayer.clearLayers();
+            
+            if (!routeCoordinates || routeCoordinates.length === 0) {
+                return;
+            }
+            
+            // 轉換座標格式為 Leaflet 需要的 [lat, lng]
+            const leafletCoords = routeCoordinates.map(coord => [coord[1], coord[0]]);
+            
+            // 繪製路線多邊線
+            routePolyline = L.polyline(leafletCoords, {
+                color: lineColor,
+                weight: 3.5,
+                opacity: 0.85,
+                lineCap: 'round',
+                lineJoin: 'round',
+                dashArray: null
+            }).addTo(routeLayer);
+            
+            // 計算邊界
+            if (leafletCoords.length > 0) {
+                mapBounds = L.latLngBounds(leafletCoords);
+            }
+        };
+        
+        // 繪製車站
+        window.drawStations = function(stations, lineColor) {
+            if (fallbackMode) {
+                fallbackLineColor = lineColor || '#00B2E5';
+                fallbackStations = Array.isArray(stations) ? stations : [];
+                renderFallback();
+                return;
+            }
+
+            if (stationLayer === null) return;
+            
+            stationLayer.clearLayers();
+            
+            if (!stations || stations.length === 0) {
+                return;
+            }
+            
+            stations.forEach(station => {
+                // 創建自定義標記
+                const markerElement = document.createElement('div');
+                markerElement.className = 'station-marker';
+                markerElement.style.backgroundColor = lineColor;
+                
+                const icon = L.divIcon({
+                    html: markerElement,
+                    iconSize: [10, 10],
+                    iconAnchor: [5, 5],
+                    className: 'station-icon'
+                });
+                
+                const marker = L.marker([station.lat, station.lng], {
+                    icon: icon,
+                    title: station.name
+                }).addTo(stationLayer);
+                
+                // 添加彈出視窗
+                marker.bindPopup(`
+                    <div style="font-size: 12px; color: #333;">
+                        <strong>${station.name}</strong><br/>
+                        ${station.number ? '車站號: ' + station.number + '<br/>' : ''}
+                        ${station.code ? '代碼: ' + station.code : ''}
+                    </div>
+                `, {
+                    closeButton: true,
+                    maxWidth: 200
+                });
+            });
+        };
+        
+        // 更新當前列車位置
+        window.updateTrainPosition = function(lat, lng, lineColor) {
+            if (fallbackMode) {
+                fallbackTrain = { lat, lng, color: lineColor || fallbackLineColor };
+                renderFallback();
+                return;
+            }
+
+            if (map === null) return;
+            
+            if (trainMarker !== null) {
+                map.removeLayer(trainMarker);
+            }
+            
+            const markerElement = document.createElement('div');
+            markerElement.className = 'train-position';
+            markerElement.style.borderColor = lineColor;
+            markerElement.style.backgroundColor = lineColor;
+            markerElement.style.opacity = '0.9';
+            
+            const icon = L.divIcon({
+                html: markerElement,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7],
+                className: 'train-icon'
+            });
+            
+            trainMarker = L.marker([lat, lng], {
+                icon: icon,
+                zIndexOffset: 1000
+            }).addTo(map);
+        };
+        
+        // 切換底圖顯示/隱藏
+        window.toggleBaseLayer = function() {
+            if (fallbackMode) {
+                baseLayerVisible = !baseLayerVisible;
+                if (fallbackBaseLayer) {
+                    fallbackBaseLayer.style.display = baseLayerVisible ? 'block' : 'none';
+                }
+                return baseLayerVisible;
+            }
+
+            if (map === null) return;
+            
+            baseLayerVisible = !baseLayerVisible;
+            
+            if (baseLayerVisible) {
+                map.addLayer(baseLayer);
+            } else {
+                map.removeLayer(baseLayer);
+            }
+            
+            return baseLayerVisible;
+        };
+        
+        // 獲取底圖可見性狀態
+        window.isBaseLayerVisible = function() {
+            return baseLayerVisible;
+        };
+
+        window.getMapStatus = function() {
+            return JSON.stringify({
+                engine: mapEngine,
+                baseLayerVisible: baseLayerVisible,
+                hasRoute: Array.isArray(fallbackRouteCoords) ? fallbackRouteCoords.length > 1 : !!routePolyline,
+                hasStations: Array.isArray(fallbackStations) ? fallbackStations.length > 0 : (stationLayer ? stationLayer.getLayers().length > 0 : false)
+            });
+        };
+        
+        // 適配邊界
+        window.fitBounds = function() {
+            if (fallbackMode) {
+                renderFallback();
+                return;
+            }
+
+            if (map !== null && mapBounds !== null) {
+                map.fitBounds(mapBounds, {
+                    padding: [50, 50],
+                    maxZoom: 15
+                });
+            }
+        };
+        
+        // 清除所有圖層
+        window.clearMap = function() {
+            if (fallbackMode) {
+                fallbackRouteCoords = [];
+                fallbackStations = [];
+                fallbackTrain = null;
+                renderFallback();
+                return;
+            }
+
+            if (routeLayer !== null) routeLayer.clearLayers();
+            if (stationLayer !== null) stationLayer.clearLayers();
+            if (trainMarker !== null) {
+                map.removeLayer(trainMarker);
+                trainMarker = null;
+            }
+        };
+
+        window.addEventListener('resize', () => {
+            if (fallbackMode) {
+                renderFallback();
+            }
+        });
+    </script>
+</body>
+</html>

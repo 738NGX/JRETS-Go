@@ -7,6 +7,15 @@ public sealed class LineConfiguration
     public required IReadOnlyList<TrainInfo> TrainInfo { get; init; }
 
     public required IReadOnlyList<StationInfo> Stations { get; init; }
+
+    public MapInfo? MapInfo { get; init; }
+}
+
+public sealed class MapInfo
+{
+    public required string Stations { get; init; }
+
+    public required string Route { get; init; }
 }
 
 public sealed class LineInfo
