@@ -1124,9 +1124,9 @@ public partial class MainWindow : Window
         {
             // Check remaining distance to next stopping station
             var remainingDistance = snapshot.TargetStopDistanceMeters - snapshot.CurrentDistanceMeters;
-            if (remainingDistance < 100)
+            if (remainingDistance < 400)
             {
-                // まもなく (approaching next stop - less than 100m away)
+                // まもなく (approaching next stop - less than 400m away)
                 displayStation = nextStoppingStation;
                 statusText = "まもなく";
             }
@@ -1151,11 +1151,12 @@ public partial class MainWindow : Window
         var lineNumberText = displayStation is null ? string.Empty : displayStation.Number.ToString("00");
         var hasLineCode = !string.IsNullOrWhiteSpace(lineCodeText);
         var hasLineNumber = !string.IsNullOrWhiteSpace(lineNumberText);
-        var showStationCodeBadge = hasStationCode && hasLineCode && hasLineNumber;
+        var showStationCodeBadge = hasLineCode && hasLineNumber;
 
         NextStationNameTextBlock.Text = displayStation?.NameJp ?? "--";
         StationCodeBadgeOuterBorder.Visibility = showStationCodeBadge ? Visibility.Visible : Visibility.Collapsed;
-        StationCode.Text = showStationCodeBadge ? displayStation!.Code! : string.Empty;
+        StationCodeBadgeOuterBorder.Background = hasStationCode ? Brushes.Black : Brushes.Transparent;
+        StationCode.Text = showStationCodeBadge && hasStationCode ? displayStation!.Code! : string.Empty;
         LineCode.Text = showStationCodeBadge ? lineCodeText : string.Empty;
         LineNumberBadgeTextBlock.Text = showStationCodeBadge ? lineNumberText : string.Empty;
 
