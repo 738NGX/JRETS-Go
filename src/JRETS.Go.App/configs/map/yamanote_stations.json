@@ -1,0 +1,212 @@
+{
+  "30201": {
+    "displacement": 0.0,
+    "coordinates": [
+      139.7287899,
+      35.6195354
+    ],
+    "labeled": true
+  },
+  "30229": {
+    "displacement": 2.0613,
+    "coordinates": [
+      139.7383525,
+      35.6286505
+    ],
+    "labeled": true
+  },
+  "30228": {
+    "displacement": 4.2206,
+    "coordinates": [
+      139.747672,
+      35.6457543
+    ]
+  },
+  "30227": {
+    "displacement": 5.642,
+    "coordinates": [
+      139.757036,
+      35.6551142
+    ]
+  },
+  "30226": {
+    "displacement": 6.8868,
+    "coordinates": [
+      139.7580869,
+      35.6661642
+    ]
+  },
+  "30225": {
+    "displacement": 8.0056,
+    "coordinates": [
+      139.7630317,
+      35.674973
+    ]
+  },
+  "30224": {
+    "displacement": 8.7935,
+    "coordinates": [
+      139.7665625,
+      35.6812564
+    ],
+    "labeled": true
+  },
+  "30223": {
+    "displacement": 10.0299,
+    "coordinates": [
+      139.7709649,
+      35.6917807
+    ]
+  },
+  "30222": {
+    "displacement": 10.788,
+    "coordinates": [
+      139.7730078,
+      35.6983584
+    ]
+  },
+  "30221": {
+    "displacement": 11.7562,
+    "coordinates": [
+      139.7746097,
+      35.7069554
+    ]
+  },
+  "30220": {
+    "displacement": 12.5279,
+    "coordinates": [
+      139.7760843,
+      35.7136003
+    ],
+    "labeled": true
+  },
+  "30219": {
+    "displacement": 13.5728,
+    "coordinates": [
+      139.7779035,
+      35.7216953
+    ]
+  },
+  "30218": {
+    "displacement": 14.547,
+    "coordinates": [
+      139.7704038,
+      35.7279696
+    ]
+  },
+  "30217": {
+    "displacement": 15.1278,
+    "coordinates": [
+      139.7666408,
+      35.7321892
+    ]
+  },
+  "30216": {
+    "displacement": 15.8588,
+    "coordinates": [
+      139.7616902,
+      35.7373601
+    ]
+  },
+  "30215": {
+    "displacement": 17.4077,
+    "coordinates": [
+      139.7472559,
+      35.7365575
+    ]
+  },
+  "30214": {
+    "displacement": 18.1964,
+    "coordinates": [
+      139.7394571,
+      35.7333581
+    ]
+  },
+  "30213": {
+    "displacement": 19.2515,
+    "coordinates": [
+      139.7285847,
+      35.7316349
+    ]
+  },
+  "30212": {
+    "displacement": 21.1423,
+    "coordinates": [
+      139.7109865,
+      35.7302436
+    ],
+    "labeled": true
+  },
+  "30211": {
+    "displacement": 22.2289,
+    "coordinates": [
+      139.7065164,
+      35.7211785
+    ]
+  },
+  "30210": {
+    "displacement": 23.2084,
+    "coordinates": [
+      139.7036846,
+      35.7126771
+    ]
+  },
+  "30209": {
+    "displacement": 24.5138,
+    "coordinates": [
+      139.7002955,
+      35.701298
+    ]
+  },
+  "30208": {
+    "displacement": 25.8972,
+    "coordinates": [
+      139.7003245,
+      35.6889925
+    ],
+    "labeled": true
+  },
+  "30207": {
+    "displacement": 26.4803,
+    "coordinates": [
+      139.7020353,
+      35.6839438
+    ]
+  },
+  "30206": {
+    "displacement": 28.0458,
+    "coordinates": [
+      139.7024696,
+      35.6702171
+    ]
+  },
+  "30205": {
+    "displacement": 29.4086,
+    "coordinates": [
+      139.7017508,
+      35.6580748
+    ],
+    "labeled": true
+  },
+  "30204": {
+    "displacement": 30.9196,
+    "coordinates": [
+      139.7101899,
+      35.6464346
+    ]
+  },
+  "30203": {
+    "displacement": 32.3943,
+    "coordinates": [
+      139.7157974,
+      35.6340714
+    ]
+  },
+  "30202": {
+    "displacement": 33.5823,
+    "coordinates": [
+      139.7236933,
+      35.6262896
+    ]
+  }
+}

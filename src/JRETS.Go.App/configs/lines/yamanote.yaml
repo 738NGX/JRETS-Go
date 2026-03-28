@@ -16,6 +16,9 @@ train_info:
       - 30212
       - 30208
       - 30205
+map_info:
+  stations: yamanote_stations.json
+  route: yamanote_route.json
 stations:
   - id: 30201
     number: 24

@@ -54,12 +54,16 @@ public partial class MainWindow : Window
     private const int HotKeyMelodyCycleSelection = 1005;
     private const int HotKeyToggleReportWindow = 1006;
     private const int HotKeyToggleMap = 1007;
+    private const int HotKeyToggleMiniMapPanel = 1008;
     private const double MelodyPanelHiddenOffsetX = -340;
     private const double MelodyPanelVisibleOffsetX = 0;
     private static readonly Duration MelodyPanelAnimationDuration = TimeSpan.FromMilliseconds(220);
     private const double ControlPanelHiddenOffsetX = -340;
     private const double ControlPanelVisibleOffsetX = 0;
     private static readonly Duration ControlPanelAnimationDuration = TimeSpan.FromMilliseconds(220);
+    private const double MiniMapPanelHiddenOffsetX = 520;
+    private const double MiniMapPanelVisibleOffsetX = 0;
+    private static readonly Duration MiniMapPanelAnimationDuration = TimeSpan.FromMilliseconds(260);
     private const double ApproachPanelTriggerMeters = 100;
     private const double ApproachPanelHideTriggerMeters = 150;
     private const int ApproachSettlementStepOneDurationMs = 480;
@@ -106,6 +110,8 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, BitmapImage> _osmTileCache = new(StringComparer.Ordinal);
 
     private bool _nativeMapBaseLayerVisible = true;
+    private bool _isMiniMapPanelVisible;
+    private bool _miniMapDataAvailable;
     private StationMapData[]? _currentMapStations;
     private RoutePathData? _currentMapRoute;
     private RunningSegmentMapping? _activeRunningSegmentMapping;
@@ -406,11 +412,12 @@ public partial class MainWindow : Window
     {
         RegisterHotKey(HotKeyStartSession, HotKeyModifiers.NoRepeat, 0x78); // F9
         RegisterHotKey(HotKeyEndSession, HotKeyModifiers.NoRepeat, 0x79); // F10
-        RegisterHotKey(HotKeyToggleClickThrough, HotKeyModifiers.NoRepeat, 0x76); // F7
-        RegisterHotKey(HotKeyToggleMap, HotKeyModifiers.NoRepeat, 0x75); // F6
+        RegisterHotKey(HotKeyToggleClickThrough, HotKeyModifiers.NoRepeat, 0x74); // F5
+        RegisterHotKey(HotKeyToggleReportWindow, HotKeyModifiers.NoRepeat, 0x75); // F6
+        RegisterHotKey(HotKeyToggleMiniMapPanel, HotKeyModifiers.NoRepeat, 0x76); // F7
+        RegisterHotKey(HotKeyToggleMap, HotKeyModifiers.NoRepeat, 0x77); // F8
         RegisterHotKey(HotKeyMelodyTogglePlayback, HotKeyModifiers.NoRepeat, 0x73); // F4
         RegisterHotKey(HotKeyMelodyCycleSelection, HotKeyModifiers.NoRepeat, 0x09); // Tab
-        RegisterHotKey(HotKeyToggleReportWindow, HotKeyModifiers.NoRepeat, 0x77); // F8
     }
 
     private void RegisterHotKey(int id, HotKeyModifiers modifiers, uint virtualKey)
@@ -464,6 +471,10 @@ public partial class MainWindow : Window
                 break;
             case HotKeyToggleReportWindow:
                 ToggleReportWindow();
+                handled = true;
+                break;
+            case HotKeyToggleMiniMapPanel:
+                ToggleMiniMapPanelVisibility();
                 handled = true;
                 break;
             case HotKeyToggleMap:
@@ -913,6 +924,128 @@ public partial class MainWindow : Window
 
         ControlPanelTransform.BeginAnimation(TranslateTransform.XProperty, slideAnimation);
         ControlPanel.BeginAnimation(OpacityProperty, opacityAnimation);
+    }
+
+    private void AnimateMiniMapPanel(bool show)
+    {
+        _isMiniMapPanelVisible = show;
+        MiniMapPanel.Visibility = Visibility.Visible;
+
+        MiniMapPanelTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        MiniMapPanel.BeginAnimation(OpacityProperty, null);
+
+        MiniMapPanelTransform.X = show ? MiniMapPanelHiddenOffsetX : MiniMapPanelVisibleOffsetX;
+        MiniMapPanel.Opacity = show ? 0 : 1;
+
+        var slideAnimation = new DoubleAnimation
+        {
+            From = MiniMapPanelTransform.X,
+            To = show ? MiniMapPanelVisibleOffsetX : MiniMapPanelHiddenOffsetX,
+            Duration = MiniMapPanelAnimationDuration,
+            EasingFunction = new CubicEase
+            {
+                EasingMode = show ? EasingMode.EaseOut : EasingMode.EaseIn
+            }
+        };
+
+        var opacityAnimation = new DoubleAnimation
+        {
+            From = MiniMapPanel.Opacity,
+            To = show ? 1 : 0,
+            Duration = MiniMapPanelAnimationDuration
+        };
+
+        if (!show)
+        {
+            opacityAnimation.Completed += (_, _) =>
+            {
+                if (!_isMiniMapPanelVisible)
+                {
+                    MiniMapPanel.Visibility = Visibility.Collapsed;
+                }
+            };
+        }
+
+        MiniMapPanelTransform.BeginAnimation(TranslateTransform.XProperty, slideAnimation);
+        MiniMapPanel.BeginAnimation(OpacityProperty, opacityAnimation);
+    }
+
+    private void ToggleMiniMapPanelVisibility()
+    {
+        if (_isMiniMapPanelVisible)
+        {
+            AnimateMiniMapPanel(show: false);
+            return;
+        }
+
+        AnimateMiniMapPanel(show: true);
+
+        if (!_sessionRunning)
+        {
+            DrawMapAvailabilityMessage("運転外です", "Not driving now");
+            return;
+        }
+
+        if (!_miniMapDataAvailable)
+        {
+            DrawMapAvailabilityMessage("この路線の地図データがありません", "No map data for this line");
+            return;
+        }
+
+        _ = RenderMapAsync(_latestApproachSnapshot, _latestApproachState, force: true);
+    }
+
+    private void DrawMapAvailabilityMessage(string japaneseMessage, string englishMessage)
+    {
+        ClearNativeMap();
+
+        var width = MiniMapCanvas.ActualWidth > 1 ? MiniMapCanvas.ActualWidth : 480;
+        var height = MiniMapCanvas.ActualHeight > 1 ? MiniMapCanvas.ActualHeight : 460;
+
+        var hintBackground = new Border
+        {
+            Width = Math.Min(420, width - 20),
+            Background = new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(14, 10, 14, 10)
+        };
+
+        var hintStack = new StackPanel
+        {
+            Orientation = Orientation.Vertical
+        };
+
+        hintStack.Children.Add(new TextBlock
+        {
+            Text = japaneseMessage,
+            Foreground = Brushes.White,
+            FontSize = 18,
+            FontWeight = FontWeights.Bold,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        hintStack.Children.Add(new TextBlock
+        {
+            Text = englishMessage,
+            Foreground = new SolidColorBrush(Color.FromRgb(210, 226, 242)),
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 6, 0, 0),
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        hintBackground.Child = hintStack;
+
+        hintBackground.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var desired = hintBackground.DesiredSize;
+        var left = Math.Max(8, (width - desired.Width) / 2);
+        var top = Math.Max(8, (height - desired.Height) / 2);
+
+        Canvas.SetLeft(hintBackground, left);
+        Canvas.SetTop(hintBackground, top);
+        MiniMapCanvas.Children.Add(hintBackground);
     }
 
     private void RefreshTimerOnTick(object? sender, EventArgs e)
@@ -3285,11 +3418,16 @@ public partial class MainWindow : Window
     {
         try
         {
+            _miniMapDataAvailable = false;
             if (_lineConfiguration?.MapInfo == null)
             {
+                _currentMapStations = null;
+                _currentMapRoute = null;
                 SetMapStatus("MAP: OFF");
-                MiniMapPanel.Visibility = Visibility.Visible;
-                ClearNativeMap();
+                if (_isMiniMapPanelVisible)
+                {
+                    DrawMapAvailabilityMessage("この路線の地図データがありません", "No map data for this line");
+                }
                 return;
             }
 
@@ -3300,26 +3438,41 @@ public partial class MainWindow : Window
 
             _currentMapStations = await LoadStationMapDataAsync(stationsPath);
             _currentMapRoute = await LoadRouteDataAsync(routePath);
+            _miniMapDataAvailable = _currentMapStations is not null && _currentMapRoute is not null;
 
-            if (_currentMapStations != null && _currentMapRoute != null)
+            if (_miniMapDataAvailable)
             {
-                await RenderMapAsync();
-                MiniMapPanel.Visibility = Visibility.Visible;
+                if (_sessionRunning)
+                {
+                    AnimateMiniMapPanel(show: true);
+                    await RenderMapAsync();
+                }
+                else if (_isMiniMapPanelVisible)
+                {
+                    DrawMapAvailabilityMessage("運転外です", "Not driving now");
+                }
             }
             else
             {
                 _lastDataSourceError = "Map data load failed: station/route json not found or invalid.";
                 SetMapStatus("MAP: DATA ERR");
-                MiniMapPanel.Visibility = Visibility.Visible;
-                ClearNativeMap();
+                if (_isMiniMapPanelVisible)
+                {
+                    DrawMapAvailabilityMessage("この路線の地図データがありません", "No map data for this line");
+                }
             }
         }
         catch
         {
+            _miniMapDataAvailable = false;
+            _currentMapStations = null;
+            _currentMapRoute = null;
             _lastDataSourceError = "Map initialization failed.";
             SetMapStatus("MAP: INIT ERR");
-            MiniMapPanel.Visibility = Visibility.Visible;
-            ClearNativeMap();
+            if (_isMiniMapPanelVisible)
+            {
+                DrawMapAvailabilityMessage("地図の初期化に失敗しました", "Failed to initialize map");
+            }
         }
     }
 
@@ -3736,7 +3889,10 @@ public partial class MainWindow : Window
         {
             _lastDataSourceError = "Map render failed: native draw error.";
             SetMapStatus("MAP: RENDER ERR");
-            MiniMapPanel.Visibility = Visibility.Visible;
+            if (_isMiniMapPanelVisible)
+            {
+                DrawMapAvailabilityMessage("地図の描画に失敗しました", "Map render failed");
+            }
         }
     }
 
@@ -3748,7 +3904,21 @@ public partial class MainWindow : Window
         _mapLastNextStationId = -1;
         _mapLastStopStationId = -1;
         _mapLastTrainMarkerDistanceMeters = null;
-        await RenderMapAsync(_latestApproachSnapshot, _latestApproachState, force: true);
+
+        if (!_miniMapDataAvailable)
+        {
+            if (_isMiniMapPanelVisible)
+            {
+                DrawMapAvailabilityMessage("この路線の地図データがありません", "No map data for this line");
+            }
+
+            return;
+        }
+
+        if (_isMiniMapPanelVisible)
+        {
+            await RenderMapAsync(_latestApproachSnapshot, _latestApproachState, force: true);
+        }
     }
 
     private async Task ClearMapAsync()
@@ -3760,6 +3930,7 @@ public partial class MainWindow : Window
         _mapLastStopStationId = -1;
         _mapLastTrainMarkerDistanceMeters = null;
         SetMapStatus("MAP: CLEARED");
+        AnimateMiniMapPanel(show: false);
         await Task.CompletedTask;
     }
 
@@ -3949,6 +4120,7 @@ public partial class MainWindow : Window
     {
         if (MapStatusTextBlock is not null)
         {
+            // For now, we are not showing map status to avoid confusion for users. The status is still updated internally for debugging purposes and may be shown in the future if needed.
             // MapStatusTextBlock.Text = status;
         }
     }

@@ -4,7 +4,8 @@
     "coordinates": [
       139.6247706,
       35.9064701
-    ]
+    ],
+    "labeled": true
   },
   "33202": {
     "displacement": 1.6697,
@@ -319,6 +320,7 @@
     "coordinates": [
       139.5317899,
       35.3542099
-    ]
+    ],
+    "labeled": true
   }
 }

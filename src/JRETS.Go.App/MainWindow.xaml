@@ -597,7 +597,12 @@
                     BorderBrush="#333"
                     BorderThickness="1"
                     CornerRadius="6,0,0,0"
-                    Visibility="Visible">
+                    Visibility="Collapsed"
+                    Opacity="0">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="MiniMapPanelTransform"
+                                        X="520"/>
+                </Border.RenderTransform>
                 <Grid>
                     <Border x:Name="MiniMapBackground"
                             Margin="12"
@@ -612,7 +617,7 @@
                             Padding="8,2"
                             IsHitTestVisible="False">
                         <TextBlock x:Name="MapStatusTextBlock"
-                                   Text="F5: ミニマップ非表示 / Hide MiniMap    F6: OSMレイヤー表示切替 / Toggle OSM Layer DIsplaced"
+                                   Text="F7: ミニマップ非表示 / Hide MiniMap    F8: OSMレイヤー表示切替 / Toggle OSM Layer"
                                    Foreground="#E5F6FF"
                                    FontSize="11"
                                    FontWeight="SemiBold"/>
