@@ -3588,11 +3588,15 @@ public partial class MainWindow : Window
                 }
             }
 
-            var stationsToDraw = runningFocus && runningFrom is not null && runningTo is not null
-                ? new[] { runningFrom, runningTo }
-                : _currentMapStations;
+            var stationNameById = _lineConfiguration!.Stations
+                .GroupBy(x => x.Id)
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.FirstOrDefault()?.NameJp ?? x.Key.ToString(CultureInfo.InvariantCulture));
 
-            foreach (var station in stationsToDraw)
+            var stationRenderEntries = new List<(StationMapData Station, Point Point, bool IsVisible)>();
+
+            foreach (var station in _currentMapStations!)
             {
                 if (station.Coordinates.Length < 2)
                 {
@@ -3600,6 +3604,9 @@ public partial class MainWindow : Window
                 }
 
                 var p = ProjectToMiniMap(station.Coordinates[0], station.Coordinates[1], viewport);
+                var isVisible = p.X >= -8 && p.X <= viewport.Width + 8 && p.Y >= -8 && p.Y <= viewport.Height + 8;
+                stationRenderEntries.Add((station, p, isVisible));
+
                 var isHighlighted = highlightedStopStationId.HasValue && station.Id == highlightedStopStationId.Value;
                 var dot = new System.Windows.Shapes.Ellipse
                 {
@@ -3613,6 +3620,112 @@ public partial class MainWindow : Window
                 Canvas.SetLeft(dot, p.X - dot.Width / 2);
                 Canvas.SetTop(dot, p.Y - dot.Height / 2);
                 MiniMapCanvas.Children.Add(dot);
+            }
+
+            if (runningFocus)
+            {
+                foreach (var entry in stationRenderEntries.Where(x => x.IsVisible))
+                {
+                    var stationName = stationNameById.TryGetValue(entry.Station.Id, out var name)
+                        ? name
+                        : entry.Station.Id.ToString(CultureInfo.InvariantCulture);
+
+                    var label = new TextBlock
+                    {
+                        Text = stationName,
+                        Foreground = Brushes.White,
+                        Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)),
+                        FontSize = 11,
+                        FontWeight = FontWeights.SemiBold,
+                        Padding = new Thickness(4, 1, 4, 1)
+                    };
+                    label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    var size = label.DesiredSize;
+
+                    var labelLeft = Math.Clamp(entry.Point.X + 8, 0, Math.Max(0, viewport.Width - size.Width));
+                    var labelTop = Math.Clamp(entry.Point.Y - size.Height / 2, 0, Math.Max(0, viewport.Height - size.Height));
+
+                    Canvas.SetLeft(label, labelLeft);
+                    Canvas.SetTop(label, labelTop);
+                    MiniMapCanvas.Children.Add(label);
+                }
+            }
+            else
+            {
+                var currentStationId = highlightedStopStationId
+                    ?? state?.CurrentStopStation?.Id
+                    ?? snapshot?.NextStationId;
+
+                var endpointIds = new HashSet<int>();
+                if (_currentMapStations!.Length > 0)
+                {
+                    endpointIds.Add(_currentMapStations[0].Id);
+                    endpointIds.Add(_currentMapStations[^1].Id);
+                }
+
+                var renderLookup = stationRenderEntries.ToDictionary(x => x.Station.Id, x => x);
+
+                if (currentStationId.HasValue
+                    && renderLookup.TryGetValue(currentStationId.Value, out var currentEntry)
+                    && currentEntry.IsVisible)
+                {
+                    var currentName = stationNameById.TryGetValue(currentStationId.Value, out var name)
+                        ? name
+                        : currentStationId.Value.ToString(CultureInfo.InvariantCulture);
+
+                    var currentLabel = new TextBlock
+                    {
+                        Text = currentName,
+                        Foreground = Brushes.White,
+                        Background = new SolidColorBrush(Color.FromArgb(176, 0, 0, 0)),
+                        FontSize = 12,
+                        FontWeight = FontWeights.Bold,
+                        Padding = new Thickness(4, 1, 4, 1)
+                    };
+                    currentLabel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    var size = currentLabel.DesiredSize;
+                    var labelLeft = Math.Clamp(currentEntry.Point.X + 8, 0, Math.Max(0, viewport.Width - size.Width));
+                    var labelTop = Math.Clamp(currentEntry.Point.Y - size.Height / 2, 0, Math.Max(0, viewport.Height - size.Height));
+
+                    Canvas.SetLeft(currentLabel, labelLeft);
+                    Canvas.SetTop(currentLabel, labelTop);
+                    MiniMapCanvas.Children.Add(currentLabel);
+                }
+
+                foreach (var endpointId in endpointIds)
+                {
+                    if (currentStationId.HasValue && endpointId == currentStationId.Value)
+                    {
+                        continue;
+                    }
+
+                    if (!renderLookup.TryGetValue(endpointId, out var entry) || !entry.IsVisible)
+                    {
+                        continue;
+                    }
+
+                    var stationName = stationNameById.TryGetValue(endpointId, out var name)
+                        ? name
+                        : endpointId.ToString(CultureInfo.InvariantCulture);
+
+                    var label = new TextBlock
+                    {
+                        Text = stationName,
+                        Foreground = Brushes.White,
+                        Background = new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)),
+                        FontSize = 11,
+                        FontWeight = FontWeights.SemiBold,
+                        Padding = new Thickness(4, 1, 4, 1)
+                    };
+                    label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    var size = label.DesiredSize;
+                    var labelLeft = Math.Clamp(entry.Point.X - 8 - size.Width, 0, Math.Max(0, viewport.Width - size.Width));
+                    var labelTop = Math.Clamp(entry.Point.Y - size.Height / 2, 0, Math.Max(0, viewport.Height - size.Height));
+
+                    Canvas.SetLeft(label, labelLeft);
+                    Canvas.SetTop(label, labelTop);
+                    MiniMapCanvas.Children.Add(label);
+                }
             }
 
             var baseState = _nativeMapBaseLayerVisible ? "DARK ON" : "BASE OFF";
@@ -3836,7 +3949,7 @@ public partial class MainWindow : Window
     {
         if (MapStatusTextBlock is not null)
         {
-            MapStatusTextBlock.Text = status;
+            // MapStatusTextBlock.Text = status;
         }
     }
 

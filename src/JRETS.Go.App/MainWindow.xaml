@@ -64,9 +64,9 @@
                                     VerticalAlignment="Bottom"
                                     Margin="0,0,0,10"/>
                                 <StackPanel Width="220"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        Orientation="Horizontal">
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Orientation="Horizontal">
                                     <TextBlock x:Name="ScoreTextBlock"
                                                Text="0"
                                                Width="120"
@@ -268,25 +268,31 @@
                                            TextWrapping="Wrap"
                                            Margin="0,0,0,6"
                                            HorizontalAlignment="Left"/>
-                                <TextBlock Text="· メニュー表示 / Show Menu (F7)"
+                                <TextBlock Text="· F5: メニュー表示 / Show Menu"
                                            Foreground="#BBB"
                                            FontSize="12"
                                            TextAlignment="Left"
                                            TextWrapping="Wrap"
                                            HorizontalAlignment="Left"/>
-                                <TextBlock Text="· 運転記録を見る / Drive Logs (F8)"
+                                <TextBlock Text="· F6: 運転記録を見る / Drive Logs"
                                            Foreground="#BBB"
                                            FontSize="12"
                                            TextAlignment="Left"
                                            TextWrapping="Wrap"
                                            HorizontalAlignment="Left"/>
-                                <TextBlock Text="· 運転開始 / Start (F9)"
+                                <TextBlock Text="· F7: ミニマップ表示 / Show MiniMap"
                                            Foreground="#BBB"
                                            FontSize="12"
                                            TextAlignment="Left"
                                            TextWrapping="Wrap"
                                            HorizontalAlignment="Left"/>
-                                <TextBlock Text="· 運転終了 / End (F10)"
+                                <TextBlock Text="· F9: 運転開始 / Start"
+                                           Foreground="#BBB"
+                                           FontSize="12"
+                                           TextAlignment="Left"
+                                           TextWrapping="Wrap"
+                                           HorizontalAlignment="Left"/>
+                                <TextBlock Text="· F10: 運転終了 / End"
                                            Foreground="#BBB"
                                            FontSize="12"
                                            TextAlignment="Left"
@@ -470,11 +476,11 @@
                                     Margin="0,0,0,0"/>
                         </WrapPanel>
 
-                        <Button Content="メニュー非表示 / Hide Menu (F7)"
+                        <Button Content="メニュー非表示 / Hide Menu (F5)"
                                 Click="ToggleClickThroughClick"
                                 Height="34"
                                 Margin="0,0,0,8"/>
-                        <Button Content="運転記録を見る / Drive Logs (F8)"
+                        <Button Content="運転記録を見る / Drive Logs (F6)"
                                 Click="OpenLatestReportClick"
                                 Height="34"/>
                         <Button Content="終了する / Shut down"
@@ -502,30 +508,30 @@
                                            FontSize="11"
                                            Margin="0,2,0,0"/>
                                 <CheckBox x:Name="EnableManualSelectionCheckBox"
-                                      Content="Enable Manual Line Selection"
-                                      Foreground="#EAF4FF"
-                                      Margin="0,8,0,0"
-                                      Checked="ManualSelectionToggleChanged"
-                                      Unchecked="ManualSelectionToggleChanged"/>
+                                          Content="Enable Manual Line Selection"
+                                          Foreground="#EAF4FF"
+                                          Margin="0,8,0,0"
+                                          Checked="ManualSelectionToggleChanged"
+                                          Unchecked="ManualSelectionToggleChanged"/>
                                 <StackPanel x:Name="ManualSelectionPanel"
-                                        Margin="0,8,0,0"
-                                        Visibility="Collapsed">
+                                            Margin="0,8,0,0"
+                                            Visibility="Collapsed">
                                     <TextBlock Text="路線 / Line"
-                                           Foreground="#C5D4E4"
-                                           FontSize="12"
-                                           Margin="0,0,0,3"/>
+                                               Foreground="#C5D4E4"
+                                               FontSize="12"
+                                               Margin="0,0,0,3"/>
                                     <ComboBox x:Name="LineConfigComboBox"
-                                          Height="24"
-                                          Margin="0,0,0,8"
-                                          SelectionChanged="LineConfigSelectionChanged"/>
+                                              Height="24"
+                                              Margin="0,0,0,8"
+                                              SelectionChanged="LineConfigSelectionChanged"/>
                                     <TextBlock Text="ダイヤ / Diagram"
-                                           Foreground="#C5D4E4"
-                                           FontSize="12"
-                                           Margin="0,0,0,3"/>
+                                               Foreground="#C5D4E4"
+                                               FontSize="12"
+                                               Margin="0,0,0,3"/>
                                     <ComboBox x:Name="ServiceTypeComboBox"
-                                          Height="24"
-                                          Margin="0,0,0,8"
-                                          SelectionChanged="ServiceTypeSelectionChanged"/>
+                                              Height="24"
+                                              Margin="0,0,0,8"
+                                              SelectionChanged="ServiceTypeSelectionChanged"/>
                                 </StackPanel>
                                 <WrapPanel Margin="0,6,0,0">
                                     <Button Content="Next Stage"
@@ -579,39 +585,37 @@
                     </StackPanel>
                 </Border>
             </Grid>
-            
+
             <!-- Mini Map Panel (Leaflet) -->
             <Border x:Name="MiniMapPanel"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"
-                    Width="400"
-                    Height="400"
+                    Width="480"
+                    Height="500"
                     Margin="0,0,0,48"
                     Background="#1a1a1a"
                     BorderBrush="#333"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="6,0,0,0"
                     Visibility="Visible">
                 <Grid>
                     <Border x:Name="MiniMapBackground"
-                            Background="#1a1a1a" />
+                            Margin="12"
+                            Background="#1a1a1a"/>
                     <Canvas x:Name="MiniMapCanvas"
+                            Margin="0,20,0,0"
                             ClipToBounds="True"
-                            Background="Transparent" />
-                    <Border HorizontalAlignment="Right"
+                            Background="Transparent"/>
+                    <Border HorizontalAlignment="Left"
                             VerticalAlignment="Top"
-                            Margin="0,8,8,0"
+                            Margin="0,0,0,0"
                             Padding="8,2"
-                            Background="#CC000000"
-                            BorderBrush="#66FFFFFF"
-                            BorderThickness="1"
-                            CornerRadius="3"
                             IsHitTestVisible="False">
                         <TextBlock x:Name="MapStatusTextBlock"
-                                   Text="MAP: INIT"
+                                   Text="F5: ミニマップ非表示 / Hide MiniMap    F6: OSMレイヤー表示切替 / Toggle OSM Layer DIsplaced"
                                    Foreground="#E5F6FF"
                                    FontSize="11"
-                                   FontWeight="SemiBold" />
+                                   FontWeight="SemiBold"/>
                     </Border>
                 </Grid>
             </Border>
