@@ -108,10 +108,12 @@ public partial class MainWindow : Window
     private bool _nativeMapBaseLayerVisible = true;
     private StationMapData[]? _currentMapStations;
     private RoutePathData? _currentMapRoute;
+    private RunningSegmentMapping? _activeRunningSegmentMapping;
     private bool? _mapLastDoorOpen;
     private int _mapLastCurrentStationId = -1;
     private int _mapLastNextStationId = -1;
     private int _mapLastStopStationId = -1;
+    private double? _mapLastTrainMarkerDistanceMeters;
     
     private ReportViewerWindow? _reportViewerWindow;
 
@@ -746,6 +748,8 @@ public partial class MainWindow : Window
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
         _activeApproachOvershootFaultTriggered = false;
+        _activeRunningSegmentMapping = null;
+        _mapLastTrainMarkerDistanceMeters = null;
         _latestApproachSnapshot = null;
         _latestApproachState = null;
         ResetApproachDisplaySmoothing();
@@ -817,6 +821,8 @@ public partial class MainWindow : Window
         _activeApproachTargetStopDistance = null;
         _activeApproachScheduledSeconds = null;
         _activeApproachOvershootFaultTriggered = false;
+        _activeRunningSegmentMapping = null;
+        _mapLastTrainMarkerDistanceMeters = null;
         _latestApproachSnapshot = null;
         _latestApproachState = null;
         ResetApproachDisplaySmoothing();
@@ -1115,6 +1121,8 @@ public partial class MainWindow : Window
         if (doorOpenTransition)
         {
             _lastDoorOpenTransitionAt = snapshot.CapturedAt;
+            _activeRunningSegmentMapping = null;
+            _mapLastTrainMarkerDistanceMeters = null;
         }
 
         var ignoreCloseAsGlitch = false;
@@ -1142,6 +1150,7 @@ public partial class MainWindow : Window
             _activeApproachStationId = ResolveNextStoppingStationFromCurrentId(departureStationId);
             _activeApproachOvershootFaultTriggered = false;
             ResetApproachDisplaySmoothing();
+            TryBuildRunningSegmentMapping(snapshot, departureStationId, _activeApproachStationId);
 
         }
 
@@ -3414,6 +3423,10 @@ public partial class MainWindow : Window
                 .ToArray();
 
             var mapStationsById = _currentMapStations.ToDictionary(x => x.Id, x => x);
+            if (snapshot is not null && state is not null && !snapshot.DoorOpen)
+            {
+                EnsureRunningSegmentMapping(snapshot, state);
+            }
 
             var runningFocus = false;
             StationMapData? runningFrom = null;
@@ -3551,6 +3564,30 @@ public partial class MainWindow : Window
                 MiniMapCanvas.Children.Add(polyline);
             }
 
+            if (!snapshot?.DoorOpen ?? false)
+            {
+                var mappedTrainDistanceMeters = TryMapGameDistanceToConfigDistance(snapshot!.CurrentDistanceMeters, out var value)
+                    ? value
+                    : (double?)null;
+                if (mappedTrainDistanceMeters.HasValue
+                    && TryInterpolateRouteCoordinate(routeCoords, mappedTrainDistanceMeters.Value / 1000.0, out var trainCoord))
+                {
+                    var trainPoint = ProjectToMiniMap(trainCoord[0], trainCoord[1], viewport);
+                    var trainDot = new System.Windows.Shapes.Ellipse
+                    {
+                        Width = 13,
+                        Height = 13,
+                        Fill = Brushes.Lime,
+                        Stroke = Brushes.Black,
+                        StrokeThickness = 2.0
+                    };
+
+                    Canvas.SetLeft(trainDot, trainPoint.X - trainDot.Width / 2);
+                    Canvas.SetTop(trainDot, trainPoint.Y - trainDot.Height / 2);
+                    MiniMapCanvas.Children.Add(trainDot);
+                }
+            }
+
             var stationsToDraw = runningFocus && runningFrom is not null && runningTo is not null
                 ? new[] { runningFrom, runningTo }
                 : _currentMapStations;
@@ -3597,6 +3634,7 @@ public partial class MainWindow : Window
         _mapLastCurrentStationId = -1;
         _mapLastNextStationId = -1;
         _mapLastStopStationId = -1;
+        _mapLastTrainMarkerDistanceMeters = null;
         await RenderMapAsync(_latestApproachSnapshot, _latestApproachState, force: true);
     }
 
@@ -3607,6 +3645,7 @@ public partial class MainWindow : Window
         _mapLastCurrentStationId = -1;
         _mapLastNextStationId = -1;
         _mapLastStopStationId = -1;
+        _mapLastTrainMarkerDistanceMeters = null;
         SetMapStatus("MAP: CLEARED");
         await Task.CompletedTask;
     }
@@ -3618,14 +3657,23 @@ public partial class MainWindow : Window
             return;
         }
 
+        EnsureRunningSegmentMapping(snapshot, state);
+
         var currentId = snapshot.NextStationId;
         var nextId = state.NextStation?.Id ?? -1;
         var stopId = state.CurrentStopStation?.Id ?? -1;
+        var mappedTrainDistanceMeters = TryMapGameDistanceToConfigDistance(snapshot.CurrentDistanceMeters, out var mappedDistance)
+            ? mappedDistance
+            : (double?)null;
+        var trainMarkerUnchanged = !mappedTrainDistanceMeters.HasValue
+            || (_mapLastTrainMarkerDistanceMeters.HasValue
+                && Math.Abs(mappedTrainDistanceMeters.Value - _mapLastTrainMarkerDistanceMeters.Value) < 8.0);
 
         if (_mapLastDoorOpen == snapshot.DoorOpen
             && _mapLastCurrentStationId == currentId
             && _mapLastNextStationId == nextId
-            && _mapLastStopStationId == stopId)
+            && _mapLastStopStationId == stopId
+            && trainMarkerUnchanged)
         {
             return;
         }
@@ -3634,8 +3682,154 @@ public partial class MainWindow : Window
         _mapLastCurrentStationId = currentId;
         _mapLastNextStationId = nextId;
         _mapLastStopStationId = stopId;
+        _mapLastTrainMarkerDistanceMeters = mappedTrainDistanceMeters;
 
         _ = RenderMapAsync(snapshot, state, force: false);
+    }
+
+    private void EnsureRunningSegmentMapping(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        if (snapshot.DoorOpen)
+        {
+            _activeRunningSegmentMapping = null;
+            return;
+        }
+
+        if (_activeRunningSegmentMapping is not null)
+        {
+            return;
+        }
+
+        var departureStationId = state.CurrentStopStation?.Id ?? _lastKnownStopStationId;
+        var nextStopStationId = _activeApproachStationId ?? state.NextStation?.Id;
+        TryBuildRunningSegmentMapping(snapshot, departureStationId, nextStopStationId);
+    }
+
+    private void TryBuildRunningSegmentMapping(RealtimeSnapshot snapshot, int? departureStationId, int? nextStopStationId)
+    {
+        if (!departureStationId.HasValue || !nextStopStationId.HasValue)
+        {
+            return;
+        }
+
+        if (_activeApproachTargetStopDistance is null)
+        {
+            return;
+        }
+
+        if (!TryGetStationConfigDistanceMeters(departureStationId.Value, out var configFromMeters)
+            || !TryGetStationConfigDistanceMeters(nextStopStationId.Value, out var configToMeters))
+        {
+            return;
+        }
+
+        var gameFromMeters = snapshot.CurrentDistanceMeters;
+        var gameToMeters = _activeApproachTargetStopDistance.Value;
+        var gameDelta = gameToMeters - gameFromMeters;
+        if (Math.Abs(gameDelta) < 0.001)
+        {
+            return;
+        }
+
+        var scale = (configToMeters - configFromMeters) / gameDelta;
+        var offset = configFromMeters - scale * gameFromMeters;
+        _activeRunningSegmentMapping = new RunningSegmentMapping
+        {
+            FromStationId = departureStationId.Value,
+            ToStationId = nextStopStationId.Value,
+            ConfigFromMeters = configFromMeters,
+            ConfigToMeters = configToMeters,
+            Scale = scale,
+            Offset = offset
+        };
+    }
+
+    private bool TryMapGameDistanceToConfigDistance(double gameDistanceMeters, out double mappedConfigMeters)
+    {
+        mappedConfigMeters = 0;
+        if (_activeRunningSegmentMapping is null)
+        {
+            return false;
+        }
+
+        var raw = _activeRunningSegmentMapping.Offset + _activeRunningSegmentMapping.Scale * gameDistanceMeters;
+        var min = Math.Min(_activeRunningSegmentMapping.ConfigFromMeters, _activeRunningSegmentMapping.ConfigToMeters);
+        var max = Math.Max(_activeRunningSegmentMapping.ConfigFromMeters, _activeRunningSegmentMapping.ConfigToMeters);
+        mappedConfigMeters = Math.Clamp(raw, min, max);
+        return true;
+    }
+
+    private bool TryGetStationConfigDistanceMeters(int stationId, out double distanceMeters)
+    {
+        distanceMeters = 0;
+        if (_currentMapStations is null)
+        {
+            return false;
+        }
+
+        var station = _currentMapStations.FirstOrDefault(x => x.Id == stationId);
+        if (station is null)
+        {
+            return false;
+        }
+
+        distanceMeters = station.Displacement * 1000.0;
+        return true;
+    }
+
+    private static bool TryInterpolateRouteCoordinate(IReadOnlyList<RoutePointEntry> routeCoords, double mappedDistanceKm, out double[] coordinate)
+    {
+        coordinate = [];
+        if (routeCoords.Count == 0)
+        {
+            return false;
+        }
+
+        if (routeCoords.Count == 1 || mappedDistanceKm <= routeCoords[0].DistanceKm)
+        {
+            var c0 = routeCoords[0].Coordinates;
+            if (c0.Length < 2)
+            {
+                return false;
+            }
+
+            coordinate = [c0[0], c0[1]];
+            return true;
+        }
+
+        for (var i = 1; i < routeCoords.Count; i++)
+        {
+            var prev = routeCoords[i - 1];
+            var next = routeCoords[i];
+            if (prev.Coordinates.Length < 2 || next.Coordinates.Length < 2)
+            {
+                continue;
+            }
+
+            if (mappedDistanceKm > next.DistanceKm)
+            {
+                continue;
+            }
+
+            var segmentLengthKm = next.DistanceKm - prev.DistanceKm;
+            var t = Math.Abs(segmentLengthKm) < 1e-9 ? 0 : (mappedDistanceKm - prev.DistanceKm) / segmentLengthKm;
+            t = Math.Clamp(t, 0, 1);
+            coordinate =
+            [
+                prev.Coordinates[0] + (next.Coordinates[0] - prev.Coordinates[0]) * t,
+                prev.Coordinates[1] + (next.Coordinates[1] - prev.Coordinates[1]) * t
+            ];
+            return true;
+        }
+
+        var tail = routeCoords[^1].Coordinates;
+        if (tail.Length < 2)
+        {
+            return false;
+        }
+
+        coordinate = [tail[0], tail[1]];
+        return true;
     }
 
     private void SetMapStatus(string status)
@@ -4055,6 +4249,21 @@ public partial class MainWindow : Window
         public required double DistanceKm { get; init; }
 
         public required double[] Coordinates { get; init; }
+    }
+
+    private sealed class RunningSegmentMapping
+    {
+        public required int FromStationId { get; init; }
+
+        public required int ToStationId { get; init; }
+
+        public required double ConfigFromMeters { get; init; }
+
+        public required double ConfigToMeters { get; init; }
+
+        public required double Scale { get; init; }
+
+        public required double Offset { get; init; }
     }
 
     private sealed class MiniMapViewport
