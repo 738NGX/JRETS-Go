@@ -60,6 +60,8 @@ public sealed class StationInfo
 
     public string? Code { get; init; }
 
+    public bool Labeled { get; init; } = false;
+
     public Dictionary<string, List<PaAnnouncementEntry>> Pa { get; init; } = [];
 
     public List<string> Melody { get; init; } = [];

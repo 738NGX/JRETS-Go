@@ -3500,7 +3500,8 @@ public partial class MainWindow : Window
             {
                 Id = int.TryParse(x.Key, out var parsedId) ? parsedId : x.Value.Id,
                 Displacement = x.Value.Displacement,
-                Coordinates = x.Value.Coordinates
+                Coordinates = x.Value.Coordinates,
+                Labeled = x.Value.Labeled
             })
             .OrderBy(x => x.Displacement)
             .ToArray();
@@ -3809,15 +3810,9 @@ public partial class MainWindow : Window
                     ?? state?.CurrentStopStation?.Id
                     ?? snapshot?.NextStationId;
 
-                var endpointIds = new HashSet<int>();
-                if (_currentMapStations!.Length > 0)
-                {
-                    endpointIds.Add(_currentMapStations[0].Id);
-                    endpointIds.Add(_currentMapStations[^1].Id);
-                }
-
                 var renderLookup = stationRenderEntries.ToDictionary(x => x.Station.Id, x => x);
 
+                // Render current station with bold style
                 if (currentStationId.HasValue
                     && renderLookup.TryGetValue(currentStationId.Value, out var currentEntry)
                     && currentEntry.IsVisible)
@@ -3845,21 +3840,12 @@ public partial class MainWindow : Window
                     MiniMapCanvas.Children.Add(currentLabel);
                 }
 
-                foreach (var endpointId in endpointIds)
+                // Render labeled stations on the right side
+                foreach (var entry in stationRenderEntries.Where(x => x.IsVisible && x.Station.Labeled && x.Station.Id != currentStationId))
                 {
-                    if (currentStationId.HasValue && endpointId == currentStationId.Value)
-                    {
-                        continue;
-                    }
-
-                    if (!renderLookup.TryGetValue(endpointId, out var entry) || !entry.IsVisible)
-                    {
-                        continue;
-                    }
-
-                    var stationName = stationNameById.TryGetValue(endpointId, out var name)
+                    var stationName = stationNameById.TryGetValue(entry.Station.Id, out var name)
                         ? name
-                        : endpointId.ToString(CultureInfo.InvariantCulture);
+                        : entry.Station.Id.ToString(CultureInfo.InvariantCulture);
 
                     var label = new TextBlock
                     {
@@ -3872,7 +3858,7 @@ public partial class MainWindow : Window
                     };
                     label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                     var size = label.DesiredSize;
-                    var labelLeft = Math.Clamp(entry.Point.X - 8 - size.Width, 0, Math.Max(0, viewport.Width - size.Width));
+                    var labelLeft = Math.Clamp(entry.Point.X + 8, 0, Math.Max(0, viewport.Width - size.Width));
                     var labelTop = Math.Clamp(entry.Point.Y - size.Height / 2, 0, Math.Max(0, viewport.Height - size.Height));
 
                     Canvas.SetLeft(label, labelLeft);
@@ -4515,6 +4501,9 @@ public partial class MainWindow : Window
 
         [JsonPropertyName("coordinates")]
         public double[] Coordinates { get; set; } = [];
+
+        [JsonPropertyName("labeled")]
+        public bool Labeled { get; set; } = false;
     }
 
     private class StationMapData
@@ -4522,6 +4511,7 @@ public partial class MainWindow : Window
         public int Id { get; set; }
         public double Displacement { get; set; }
         public double[] Coordinates { get; set; } = [];
+        public bool Labeled { get; set; } = false;
     }
 
     private class RoutePathData
