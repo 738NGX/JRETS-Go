@@ -47,7 +47,11 @@ public partial class MainWindow
                 if (_sessionRunning)
                 {
                     AnimateMiniMapPanel(show: true);
-                    await RenderMapAsync();
+                    var snapshot = GetCurrentSnapshot();
+                    var state = _displayStateResolver.Resolve(_lineConfiguration, snapshot);
+                    _latestApproachSnapshot = snapshot;
+                    _latestApproachState = state;
+                    await RenderMapAsync(snapshot, state, force: true);
                 }
                 else if (_isMiniMapPanelVisible)
                 {

@@ -1,106 +1,45 @@
 # JRETS-Go
 
-这是一个用于JR东日本列车模拟器的辅助外挂插件。
+这是一个用于JR东日本列车模拟器的辅助插件。
 
-## 核心工作流
+This is a support plugin for JR EAST Train Simulator.
 
-从内存中读取游戏进程的各项数据->进程处理这些数据来支持各项扩展功能。
+これは「JR東日本トレインシミュレータ」用の補助プラグインです。
 
-## 当前通过CE得到的游戏内存信息
+## 用户文档 / User Doc / ユーザー向けドキュメント
 
-### 4字节数
+对于希望使用这一插件的用户，请参阅这篇文档：[USER_GUIDE_CN](./docs/USER_GUIDE_CN.md)
 
-- JREAST_TrainSimulator.exe+110B1D8：下一车站ID，形如33201。其中332代表线路ID京滨东北线，01代表游戏中的第1站JK47大宫，从大宫停靠、发车、走行直到列车在下一站JK46埼玉新都心停车前该值始终为33201，停车后变为33202。
-- JREAST_TrainSimulator.exe+1765F60：当前车辆的开关门状态，开门为1，关门为0。
-- JREAST_TrainSimulator.exe+14AAE84：主时钟，单位为秒。例如30494代表08时28分14秒。
-- JREAST_TrainSimulator.exe+174907C：下一站到达时刻表的秒数。例如预计11时45分14秒到达则为14。
-- JREAST_TrainSimulator.exe+1749080：下一站到达时刻表的分钟数。例如预计11时45分14秒到达则为45。
-- JREAST_TrainSimulator.exe+1749084：下一站到达时刻表的小时数。例如预计11时45分14秒到达则为11。
+For users who wish to use this plugin, please refer to this document: Not Supported
 
-*搜索建议：北浦和到着时间7：55：20，埼玉新都心到着时间7：50：50。
+本プラグインの使用を希望されるユーザーの方は、こちらのドキュメントをご参照ください：現在未対応
 
-### 双精度浮点数
+## 开发者文档  / Developer Doc / 開発者向けドキュメント
 
-- JREAST_TrainSimulator.exe+14AAE18：当前车辆距离线路起点站停车位置的位移，单位为米。
-- JREAST_TrainSimulator.exe+10BEDF0：下一站预定停车点距离线路起点站停车位置的位移，单位为米。
+对于希望为本插件开发做出贡献的开发者，请参阅这篇文档：[DEV_GUIDE_CN](./docs/DEV_GUIDE_CN.md)
 
-### 注意事项
+For developers who wish to contribute to the development of this plugin, please refer to this document: Not Supported
 
-由于不确定游戏更新是否会影响这些内存偏移量，因此尽可能在代码中硬编码这些值，而是挂在外部配置文件中。或许可以在远期探讨一下如何避免每次游戏更新都需要重新搜索这些值？
+本プラグインの開発に貢献を希望される開発者の方は、こちらのドキュメントをご参照ください：現在未対応
 
-## 目前Demo需要实现的内容
+## 当前支持线路 / Currently Supported Routes / 現在対応している路線
 
-为了简单起见，采用不需要额外购买DLC的京滨东北线·根岸线进行原型功能设计和测试。
+- ✅ 完全支持 / Full Support / 完全対応
+- 🟡 计划支持 / Planned Support / 対応予定
+- ❌ 暂不支持 / Not supported / 現在未対応
 
-### 线路配置文件
+*基本功能包括HUD显示、停车评分和驾驶日志记录
 
-需要从本地读取一个yaml文件，可以设计成如下格式
+*Basic features include HUD display, stop accuracy scoring, and driving log recording.
 
-```yaml
-line_info:
-  name_jp: 京浜東北·根岸線
-  name_en: Keihin Tōhoku·Negishi Line
-  line_color: #00B2E5
-  code: JK
-train_info:
-  - id: 727B
-    type: Local
-    terminal: 33241
-  - id: 1275A
-    type: Rapid
-    terminal: 33246
-stations:
-  - id: 33201
-    number: 47
-    name_jp: 大宮
-    name_en: Ōmiya
-    code: OMY
-    melody: ["JRE-IKST-007-02.mp3"] # 发车音乐暂时先用统一的新版，用数组是可以在将来兼容老版音乐
-  - id: 33202
-    number: 46
-    name_jp: さいたま新都心
-    name_en: Saitama-Shintoshin
-    # 不是所有车站都有code
-    melody: ["JRE-IKST-007-02.mp3"]
-  ......
-  # 处理快速车跳站
-  - id: 33215
-    number: 32
-    name_jp: 日暮里
-    name_en: Nippori
-    code: NPR
-    skip_train: ["1275A"]
-    melody: ["JRE-IKST-007-02.mp3"]
-  ......
-```
+*基本機能には、HUD表示、停車評価、および運転ログ記録が含まれます。
 
-### 悬浮窗显示
+| 线路<br />Line<br />線路                | 运行图<br />Diagram<br />ダイヤ | 基本功能<br />Basic Functions<br />基本機能 | 发车音乐<br />Station Melodies<br />発車メロディ | 车内广播<br />Announcements<br />車内放送 | 小地图<br />Mini-map<br />ミニマップ |
+| --------------------------------------- | ------------------------------- | ------------------------------------------- | ------------------------------------------------ | ----------------------------------------- | ------------------------------------ |
+| 京浜東北線<br />Keihin-Tohoku Line (JK) | 727B（各停 磯子）               | ✅                                           | ✅                                                | ✅                                         | ✅                                    |
+|                                         | 1275A（快速 大船）              | ✅                                           | ✅                                                | ✅                                         | ✅                                    |
+| 山手線<br />Yamanote Line (JY)          | 876G（各停 内回り）             | ✅                                           | ✅                                                | ✅                                         | ✅                                    |
+|                                         | 1208G（各停 内回り）            | ✅                                           | ✅                                                | ✅                                         | ✅                                    |
+| 東海道線<br />Tokaido Line (JT)         |                                 | 🟡                                           |                                                  |                                           |                                      |
+| 埼京線<br />Saikyo Line (JA)            |                                 | 🟡                                           |                                                  |                                           |                                      |
 
-整个软件需要以悬浮窗的形式完全覆盖在游戏画面之上（当然不能遮挡正常对游戏的鼠标操控）。
-
-### 开始读取控制
-
-因为目前似乎没有好的办法判断是否在游戏中，因此需要设定一组键盘快捷键表示行程开始和行程结束，在此区间内系统将会工作和记录。
-
-### 列车走行位置显示
-
-最顶部应该有一个长条显示列车走行位置的信息，可以参考车内LCD的做法。
-
-主要依靠的内存信息为下一站车站ID和车门开关状态。例如下一站为33201，车门开时显示一个大宫站停靠的状态，门关后变成下一站埼玉新都心这样。
-
-如果你不确定设计样式可以先完成一个大概的草稿方案。需要留一个Debug模式在不读取游戏数据的情况下使用键盘输入进行测试。
-
-### 
-
-### 评分系统
-
-模仿电车GO设置一个驾驶评分系统，为了简单起见目前只对停车过程进行评分。主要评估指标包含停止时间和停止位置，可以利用内存中读到的那些值进行计算。
-
-### 驾驶记录导出
-
-结束驾驶记录后导出一份驾驶记录报告存储在本地，主要记录停站信息和得分情况。软件可以根据本地记录进行可视化展示。
-
-### 远期目标
-
-接入更加完整的车内广播
-……

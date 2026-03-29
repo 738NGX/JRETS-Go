@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -51,30 +52,116 @@ public partial class MainWindow
             return;
         }
 
-        var reportsDirectory = Path.Combine(AppContext.BaseDirectory, "reports");
-        var latestPath = _driveReportWorkflowService.FindLatestReportPath(_driveReportReader, reportsDirectory);
-        if (string.IsNullOrWhiteSpace(latestPath))
+        if (!TryLoadLatestReport(out var report, out var latestPath, out var reportsDirectory, out var loadError))
         {
-            _lastDataSourceError = "No report file found.";
+            _lastDataSourceError = loadError;
             UpdateDisplay();
             return;
         }
 
         try
         {
-            var report = _driveReportReader.Load(latestPath);
             var lineConfigsDirectory = Path.Combine(AppContext.BaseDirectory, "configs", "lines");
             _reportViewerWindow = new ReportViewerWindow(report, latestPath, reportsDirectory, lineConfigsDirectory);
+            _reportViewerWindow.Owner = this;
             _reportViewerWindow.Closed += (sender, e) =>
             {
                 _reportViewerWindow = null;
             };
             _reportViewerWindow.Show();
+            _reportViewerWindow.Activate();
         }
         catch (Exception ex)
         {
             _lastDataSourceError = $"Open report failed: {ex.Message}";
             UpdateDisplay();
+        }
+    }
+
+    private bool TryLoadLatestReport(
+        out DriveSessionReport report,
+        out string latestPath,
+        out string reportsDirectory,
+        out string errorMessage)
+    {
+        report = null!;
+        latestPath = string.Empty;
+        reportsDirectory = string.Empty;
+        errorMessage = string.Empty;
+
+        var candidateFiles = EnumerateCandidateReportFiles()
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .ToArray();
+
+        if (candidateFiles.Length == 0)
+        {
+            var searched = string.Join(", ", GetCandidateReportsDirectories());
+            errorMessage = $"No report file found. Searched: {searched}";
+            return false;
+        }
+
+        string? lastLoadError = null;
+        foreach (var candidatePath in candidateFiles)
+        {
+            try
+            {
+                report = _driveReportReader.Load(candidatePath);
+                latestPath = candidatePath;
+                reportsDirectory = Path.GetDirectoryName(candidatePath) ?? Path.Combine(AppContext.BaseDirectory, "reports");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                lastLoadError = $"{Path.GetFileName(candidatePath)}: {ex.Message}";
+            }
+        }
+
+        errorMessage = string.IsNullOrWhiteSpace(lastLoadError)
+            ? "Report files were found, but all failed to load."
+            : $"Report files were found, but all failed to load. Last error: {lastLoadError}";
+        return false;
+    }
+
+    private IEnumerable<string> EnumerateCandidateReportFiles()
+    {
+        foreach (var directory in GetCandidateReportsDirectories())
+        {
+            if (!Directory.Exists(directory))
+            {
+                continue;
+            }
+
+            foreach (var file in Directory.GetFiles(directory, "drive-report-*.json"))
+            {
+                yield return file;
+            }
+        }
+    }
+
+    private IEnumerable<string> GetCandidateReportsDirectories()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var baseDirReports = Path.Combine(AppContext.BaseDirectory, "reports");
+        if (seen.Add(baseDirReports))
+        {
+            yield return baseDirReports;
+        }
+
+        var currentDirReports = Path.Combine(Environment.CurrentDirectory, "reports");
+        if (seen.Add(currentDirReports))
+        {
+            yield return currentDirReports;
+        }
+
+        var exeDir = Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(exeDir))
+        {
+            var exeDirReports = Path.Combine(exeDir, "reports");
+            if (seen.Add(exeDirReports))
+            {
+                yield return exeDirReports;
+            }
         }
     }
 
@@ -92,6 +179,11 @@ public partial class MainWindow
         }
         else
         {
+            if (_reportViewerWindow.WindowState == WindowState.Minimized)
+            {
+                _reportViewerWindow.WindowState = WindowState.Normal;
+            }
+
             _reportViewerWindow.Show();
             _reportViewerWindow.Activate();
         }
