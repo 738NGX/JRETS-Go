@@ -38,13 +38,7 @@ public sealed class StopScoringService
     ];
 
     public StopScoringService()
-        : this(new ScoringConfiguration())
     {
-    }
-
-    public StopScoringService(ScoringConfiguration configuration)
-    {
-        _ = configuration;
     }
 
     public StationStopScore ScoreStop(StationInfo station, RealtimeSnapshot snapshot)

@@ -152,7 +152,6 @@ public partial class MainWindow : Window
     private readonly List<StationStopScore> _stationScores = [];
     private int? _lastScoredStationId;
     private TrainServiceOption? _selectedService;
-    private ScoringConfiguration _scoringConfiguration = new();
     private readonly string _announcementTempDirectory = Path.Combine(Path.GetTempPath(), "JRETS.Go.App", "normalized-audio");
 
     private int? _melodyCurrentStationId;
@@ -210,7 +209,7 @@ public partial class MainWindow : Window
             _lineConfiguration.Stations,
             TryLoadDebugStationDisplacementsMeters(_lineConfiguration));
         _displayStateResolver = new DisplayStateResolver();
-        _stopScoringService = new StopScoringService(_scoringConfiguration);
+        _stopScoringService = new StopScoringService();
         _driveReportExporter = new DriveReportExporter();
         _driveReportReader = new DriveReportReader();
         UpcomingStationsItemsControl.ItemsSource = _upcomingStations;
@@ -2332,9 +2331,7 @@ public partial class MainWindow : Window
         LoadLineConfigurationOptions();
         LoadLinePathMappings();
 
-        _scoringConfiguration = new ScoringConfiguration();
-
-        _stopScoringService = new StopScoringService(_scoringConfiguration);
+        _stopScoringService = new StopScoringService();
 
         StopLiveMemorySampling();
         _memoryDataSource?.Dispose();
