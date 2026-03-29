@@ -3,7 +3,7 @@ using JRETS.Go.Core.Runtime;
 
 namespace JRETS.Go.Core.Services;
 
-public sealed class DebugRealtimeDataSource : IRealtimeDataSource
+public sealed class DebugRealtimeDataSource
 {
     private const double FallbackStationSpacingMeters = 1000;
     private const double DebugDepartureAdvanceMeters = 200;
@@ -107,25 +107,6 @@ public sealed class DebugRealtimeDataSource : IRealtimeDataSource
                 _clockSeconds += 180;
                 break;
         }
-    }
-
-    public void DebugDepart()
-    {
-        _doorOpen = false;
-    }
-
-    public void DebugArrive()
-    {
-        if (_currentStationIndex < _stations.Count - 1)
-        {
-            _currentStationIndex++;
-        }
-
-        _doorOpen = true;
-        _currentPhase = DebugPhase.Stopped;
-        _currentDistance = ResolveCurrentStopDistance();
-        _targetStopDistance = ResolveTargetStopDistance();
-        _clockSeconds += 180;
     }
 
     public void TickRunning()

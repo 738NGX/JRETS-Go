@@ -4,7 +4,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace JRETS.Go.Core.Services;
 
-public sealed class YamlMemoryOffsetsConfigurationLoader : IMemoryOffsetsConfigurationLoader
+public sealed class YamlMemoryOffsetsConfigurationLoader
 {
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
         .WithNamingConvention(UnderscoredNamingConvention.Instance)

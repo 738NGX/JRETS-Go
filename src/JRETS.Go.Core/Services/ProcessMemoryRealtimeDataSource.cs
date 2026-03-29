@@ -6,7 +6,7 @@ using JRETS.Go.Core.Runtime;
 
 namespace JRETS.Go.Core.Services;
 
-public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisposable
+public sealed class ProcessMemoryRealtimeDataSource : IDisposable
 {
     private const int ProcessVmRead = 0x0010;
     private const int ProcessQueryInformation = 0x0400;
@@ -218,24 +218,6 @@ public sealed class ProcessMemoryRealtimeDataSource : IRealtimeDataSource, IDisp
             fieldInfos["timetable_hour"],
             fieldInfos["current_distance"],
             fieldInfos["target_stop_distance"]);
-    }
-
-    private int ReadInt32(long relativeOffset)
-    {
-        var bytes = ReadBytes(relativeOffset, 4);
-        return BitConverter.ToInt32(bytes, 0);
-    }
-
-    private byte ReadByte(long relativeOffset)
-    {
-        var bytes = ReadBytes(relativeOffset, 1);
-        return bytes[0];
-    }
-
-    private double ReadDouble(long relativeOffset)
-    {
-        var bytes = ReadBytes(relativeOffset, 8);
-        return BitConverter.ToDouble(bytes, 0);
     }
 
     private byte[] ReadBytes(long relativeOffset, int byteCount)

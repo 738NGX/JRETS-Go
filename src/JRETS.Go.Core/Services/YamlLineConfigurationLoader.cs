@@ -6,7 +6,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace JRETS.Go.Core.Services;
 
-public sealed class YamlLineConfigurationLoader : ILineConfigurationLoader
+public sealed class YamlLineConfigurationLoader
 {
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
         .WithNamingConvention(UnderscoredNamingConvention.Instance)

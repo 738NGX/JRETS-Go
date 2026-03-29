@@ -8,7 +8,17 @@ public sealed class DisplayStateResolver
     public TrainDisplayState Resolve(LineConfiguration lineConfiguration, RealtimeSnapshot snapshot)
     {
         var stations = lineConfiguration.Stations;
-        var currentIndex = Array.FindIndex(stations.ToArray(), x => x.Id == snapshot.NextStationId);
+        var currentIndex = -1;
+        for (var i = 0; i < stations.Count; i++)
+        {
+            if (stations[i].Id != snapshot.NextStationId)
+            {
+                continue;
+            }
+
+            currentIndex = i;
+            break;
+        }
 
         if (currentIndex < 0)
         {

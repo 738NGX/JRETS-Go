@@ -4,7 +4,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace JRETS.Go.Core.Services;
 
-public sealed class YamlLinePathMappingsConfigurationLoader : ILinePathMappingsConfigurationLoader
+public sealed class YamlLinePathMappingsConfigurationLoader
 {
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
         .WithNamingConvention(UnderscoredNamingConvention.Instance)
