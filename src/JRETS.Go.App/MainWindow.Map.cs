@@ -173,6 +173,12 @@ public partial class MainWindow
                 .Where(x => x.Length >= 2)
                 .ToArray();
 
+            // For loop lines, append the first point at the end to close the path visually
+            if (_lineConfiguration.LineInfo.IsLoop && fullLineCoords.Length > 0)
+            {
+                fullLineCoords = [..fullLineCoords, fullLineCoords[0]];
+            }
+
             var stationCoords = _currentMapStations
                 .Where(s => s.Coordinates.Length >= 2)
                 .Select(s => s.Coordinates)
@@ -595,6 +601,15 @@ public partial class MainWindow
             return;
         }
 
+        var loopLengthMeters = TryGetLoopRouteLengthMeters(out var routeLengthMeters)
+            ? routeLengthMeters
+            : 0;
+
+        var shouldWrapLoopDistance = _lineConfiguration?.LineInfo.IsLoop == true && loopLengthMeters > 1;
+        var adjustedConfigToMeters = shouldWrapLoopDistance
+            ? ChooseLoopAdjustedTargetDistance(configFromMeters, configToMeters, snapshot.TargetStopDistanceMeters - snapshot.CurrentDistanceMeters, loopLengthMeters)
+            : configToMeters;
+
         var gameFromMeters = snapshot.CurrentDistanceMeters;
         var gameToMeters = _activeApproachTargetStopDistance.Value;
         var gameDelta = gameToMeters - gameFromMeters;
@@ -603,14 +618,15 @@ public partial class MainWindow
             return;
         }
 
-        var scale = (configToMeters - configFromMeters) / gameDelta;
+        var scale = (adjustedConfigToMeters - configFromMeters) / gameDelta;
         var offset = configFromMeters - scale * gameFromMeters;
         _activeRunningSegmentMapping = new RunningSegmentMapping
         {
             FromStationId = departureStationId.Value,
             ToStationId = nextStopStationId.Value,
             ConfigFromMeters = configFromMeters,
-            ConfigToMeters = configToMeters,
+            ConfigToMeters = adjustedConfigToMeters,
+            LoopLengthMeters = shouldWrapLoopDistance ? loopLengthMeters : 0,
             Scale = scale,
             Offset = offset
         };
@@ -627,8 +643,68 @@ public partial class MainWindow
         var raw = _activeRunningSegmentMapping.Offset + _activeRunningSegmentMapping.Scale * gameDistanceMeters;
         var min = Math.Min(_activeRunningSegmentMapping.ConfigFromMeters, _activeRunningSegmentMapping.ConfigToMeters);
         var max = Math.Max(_activeRunningSegmentMapping.ConfigFromMeters, _activeRunningSegmentMapping.ConfigToMeters);
-        mappedConfigMeters = Math.Clamp(raw, min, max);
+        var clamped = Math.Clamp(raw, min, max);
+        mappedConfigMeters = _activeRunningSegmentMapping.LoopLengthMeters > 1
+            ? NormalizeLoopDistanceMeters(clamped, _activeRunningSegmentMapping.LoopLengthMeters)
+            : clamped;
         return true;
+    }
+
+    private bool TryGetLoopRouteLengthMeters(out double loopLengthMeters)
+    {
+        loopLengthMeters = 0;
+
+        if (_currentMapRoute?.RoutePoints is { Count: > 0 })
+        {
+            loopLengthMeters = _currentMapRoute.RoutePoints.Keys.Max() * 1000.0;
+            if (loopLengthMeters > 1)
+            {
+                return true;
+            }
+        }
+
+        if (_currentMapStations is { Length: > 0 })
+        {
+            loopLengthMeters = _currentMapStations.Max(x => x.Displacement) * 1000.0;
+            return loopLengthMeters > 1;
+        }
+
+        return false;
+    }
+
+    private static double ChooseLoopAdjustedTargetDistance(double fromMeters, double targetMeters, double gameDelta, double loopLengthMeters)
+    {
+        var bestTarget = targetMeters;
+        var bestScore = double.PositiveInfinity;
+        var desiredSign = Math.Sign(gameDelta);
+
+        for (var shift = -1; shift <= 1; shift++)
+        {
+            var candidate = targetMeters + shift * loopLengthMeters;
+            var candidateDelta = candidate - fromMeters;
+
+            // Prefer candidates with matching direction and shortest segment on the unwrapped axis.
+            var signPenalty = desiredSign != 0 && Math.Sign(candidateDelta) != desiredSign ? 1_000_000.0 : 0.0;
+            var score = Math.Abs(candidateDelta) + signPenalty;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestTarget = candidate;
+            }
+        }
+
+        return bestTarget;
+    }
+
+    private static double NormalizeLoopDistanceMeters(double distanceMeters, double loopLengthMeters)
+    {
+        var normalized = distanceMeters % loopLengthMeters;
+        if (normalized < 0)
+        {
+            normalized += loopLengthMeters;
+        }
+
+        return normalized;
     }
 
     private bool TryGetStationConfigDistanceMeters(int stationId, out double distanceMeters)
@@ -969,7 +1045,7 @@ public partial class MainWindow
         return new Point(x, y);
     }
 
-    private static IReadOnlyList<Point> SanitizeRoutePoints(IReadOnlyList<Point> input)
+    private IReadOnlyList<Point> SanitizeRoutePoints(IReadOnlyList<Point> input)
     {
         if (input.Count <= 2)
         {
@@ -988,7 +1064,8 @@ public partial class MainWindow
         }
 
         // Guard against accidental closure artifacts.
-        if (deduped.Count > 3 && Distance(deduped[0], deduped[^1]) < 2.0)
+            // For loop lines, preserve the closure point; for linear routes, remove it
+            if (!_lineConfiguration.LineInfo.IsLoop && deduped.Count > 3 && Distance(deduped[0], deduped[^1]) < 2.0)
         {
             deduped.RemoveAt(deduped.Count - 1);
         }
@@ -1137,6 +1214,8 @@ public partial class MainWindow
         public required double ConfigFromMeters { get; init; }
 
         public required double ConfigToMeters { get; init; }
+
+        public required double LoopLengthMeters { get; init; }
 
         public required double Scale { get; init; }
 

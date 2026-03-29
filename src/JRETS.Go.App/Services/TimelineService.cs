@@ -20,6 +20,7 @@ public sealed class TimelineService
     public TimelineState ComputeState(
         RealtimeSnapshot snapshot,
         IReadOnlyList<StationInfo> stopStations,
+        bool isLoopLine,
         int visibleTokenCount,
         bool initialized,
         int timelineActiveToken,
@@ -30,6 +31,27 @@ public sealed class TimelineService
         var expectedActiveToken = snapshot.DoorOpen
             ? currentPos * 2
             : Math.Min(totalTokens - 1, currentPos * 2 + 1);
+
+        if (isLoopLine && initialized && stopStations.Count > 0)
+        {
+            var lastStationToken = (stopStations.Count - 1) * 2;
+
+            // Keep token progression continuous when wrapping from the last station to the first station.
+            if (!snapshot.DoorOpen
+                && currentPos == 0
+                && timelineActiveToken >= lastStationToken - 1)
+            {
+                expectedActiveToken = stopStations.Count * 2 - 1;
+            }
+
+            // Arrival at the first station after wrap should continue after the closure segment.
+            if (snapshot.DoorOpen
+                && currentPos == 0
+                && timelineActiveToken >= lastStationToken)
+            {
+                expectedActiveToken = stopStations.Count * 2;
+            }
+        }
 
         if (!initialized)
         {
@@ -51,8 +73,15 @@ public sealed class TimelineService
             ? 0
             : ((Math.Max(0, expectedActiveToken - 1) / 2) * 2);
 
-        var maxStart = Math.Max(0, totalTokens - visibleTokenCount);
-        alignedWindowStart = Math.Clamp(alignedWindowStart, 0, maxStart);
+        if (isLoopLine)
+        {
+            alignedWindowStart = Math.Max(0, alignedWindowStart);
+        }
+        else
+        {
+            var maxStart = Math.Max(0, totalTokens - visibleTokenCount);
+            alignedWindowStart = Math.Clamp(alignedWindowStart, 0, maxStart);
+        }
 
         return new TimelineState
         {
@@ -71,6 +100,7 @@ public sealed class TimelineService
             return 0;
         }
 
+        // Try to find exact match for nextStationId (the station we're approaching)
         for (var i = 0; i < stopStations.Count; i++)
         {
             if (stopStations[i].Id == snapshot.NextStationId)
@@ -79,6 +109,7 @@ public sealed class TimelineService
             }
         }
 
+        // Fallback: find previous station by ID
         var previousIndex = stopStations
             .Select((station, index) => new { station.Id, index })
             .Where(x => x.Id < snapshot.NextStationId)

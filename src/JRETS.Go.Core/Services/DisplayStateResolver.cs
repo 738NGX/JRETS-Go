@@ -26,7 +26,19 @@ public sealed class DisplayStateResolver
         }
 
         var currentStation = stations.Count == 0 ? null : stations[currentIndex];
-        var nextStation = currentIndex < stations.Count - 1 ? stations[currentIndex + 1] : null;
+        StationInfo? nextStation;
+        if (stations.Count == 0)
+        {
+            nextStation = null;
+        }
+        else if (currentIndex < stations.Count - 1)
+        {
+            nextStation = stations[currentIndex + 1];
+        }
+        else
+        {
+            nextStation = lineConfiguration.LineInfo.IsLoop ? stations[0] : null;
+        }
         var currentStopStation = snapshot.DoorOpen ? currentStation : null;
 
         var displayText = snapshot.DoorOpen

@@ -137,9 +137,11 @@ public partial class MainWindow
             return;
         }
 
+
         var timelineState = _timelineService.ComputeState(
             snapshot,
             stopStations,
+            _lineConfiguration.LineInfo.IsLoop,
             TimelineVisibleTokenCount,
             _timelineInitialized,
             _timelineActiveToken,
@@ -150,17 +152,36 @@ public partial class MainWindow
         _timelineLastDoorOpen = timelineState.LastDoorOpen;
         var totalTokens = timelineState.TotalTokens;
 
+
         var futureBrush = GetFutureBrush();
         var finishedBrush = new SolidColorBrush(Color.FromRgb(120, 120, 120));
         var activeBrush = new SolidColorBrush(Color.FromRgb(190, 24, 24));
 
-        var endExclusive = Math.Min(totalTokens, _timelineWindowStart + TimelineVisibleTokenCount);
+        var isLoopLine = _lineConfiguration.LineInfo.IsLoop;
+
+        // For loop lines, allow showing beyond the theoretical end to display closure
+        var endExclusive = isLoopLine
+            ? _timelineWindowStart + TimelineVisibleTokenCount
+            : Math.Min(totalTokens, _timelineWindowStart + TimelineVisibleTokenCount);
+
         for (var tokenIndex = _timelineWindowStart; tokenIndex < endExclusive; tokenIndex++)
         {
             var isStation = tokenIndex % 2 == 0;
             var stationIndex = tokenIndex / 2;
             var isFirstVisibleStation = isStation && stationIndex == _timelineWindowStart / 2;
-            var station = stopStations[Math.Clamp(stationIndex, 0, stopStations.Count - 1)];
+            
+            // For loop lines, use modulo to wrap around; for linear lines, clamp to bounds
+            int resolvedStationIndex;
+            if (isLoopLine && isStation)
+            {
+                resolvedStationIndex = stationIndex % stopStations.Count;
+            }
+            else
+            {
+                resolvedStationIndex = Math.Clamp(stationIndex, 0, stopStations.Count - 1);
+            }
+            
+            var station = stopStations[resolvedStationIndex];
 
             var fill = tokenIndex < _timelineActiveToken
                 ? finishedBrush

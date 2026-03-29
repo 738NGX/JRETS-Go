@@ -25,6 +25,9 @@ stations:
     name_jp: 大崎
     name_en: Osaki
     code: OSK
+    pa:
+      876G:
+        - "30.mp3"
     melody:
       - "JRE-IKST-010-01.mp3"
       - "遊園地のある駅.mp3"
@@ -313,12 +316,3 @@ stations:
     melody:
       - "JRE-IKST-010-01.mp3"
       - "JR-SH2.mp3"
-  - id: 30200
-    number: 24
-    name_jp: 大崎
-    name_en: Osaki
-    code: OSK
-    pa:
-      876G:
-        - "30.mp3"
-    melody: []
