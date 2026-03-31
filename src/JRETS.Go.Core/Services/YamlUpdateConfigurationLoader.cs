@@ -90,45 +90,61 @@ public sealed class YamlUpdateConfigurationLoader
 
     private sealed class UpdateConfigurationYaml
     {
+        [YamlMember(Alias = "github")]
         public GitHubYaml? GitHub { get; init; }
 
+        [YamlMember(Alias = "release_state_asset_name")]
         public string? ReleaseStateAssetName { get; init; }
 
+        [YamlMember(Alias = "app")]
         public ChannelYaml? App { get; init; }
 
+        [YamlMember(Alias = "configs")]
         public ChannelYaml? Configs { get; init; }
 
+        [YamlMember(Alias = "audio")]
         public AudioChannelYaml? Audio { get; init; }
 
+        [YamlMember(Alias = "mandatory")]
         public bool? Mandatory { get; init; }
 
+        [YamlMember(Alias = "check_timeout_seconds")]
         public int? CheckTimeoutSeconds { get; init; }
 
+        [YamlMember(Alias = "max_retry_count")]
         public int? MaxRetryCount { get; init; }
 
+        [YamlMember(Alias = "include_prerelease")]
         public bool? IncludePrerelease { get; init; }
     }
 
     private sealed class GitHubYaml
     {
+        [YamlMember(Alias = "owner")]
         public string? Owner { get; init; }
 
+        [YamlMember(Alias = "repo")]
         public string? Repo { get; init; }
     }
 
     private class ChannelYaml
     {
+        [YamlMember(Alias = "asset_pattern")]
         public string? AssetPattern { get; init; }
 
+        [YamlMember(Alias = "checksum_name")]
         public string? ChecksumName { get; init; }
     }
 
     private sealed class AudioChannelYaml : ChannelYaml
     {
+        [YamlMember(Alias = "manifest_name")]
         public string? ManifestName { get; init; }
 
+        [YamlMember(Alias = "package_pattern")]
         public string? PackagePattern { get; init; }
 
+        [YamlMember(Alias = "require_full_on_first_install")]
         public bool? RequireFullOnFirstInstall { get; init; }
     }
 }

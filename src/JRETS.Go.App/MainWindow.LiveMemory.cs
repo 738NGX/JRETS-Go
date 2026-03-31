@@ -216,6 +216,35 @@ public partial class MainWindow
         {
             _updateConfiguration = null;
             _lastDataSourceError = $"Update config load failed: {ex.Message}";
+            WriteUpdateConfigLoadFailureLog(_updateConfigPath, ex);
+        }
+    }
+
+    private static void WriteUpdateConfigLoadFailureLog(string configPath, Exception ex)
+    {
+        try
+        {
+            var logDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "JRETS.Go.App",
+                "logs");
+            Directory.CreateDirectory(logDirectory);
+
+            var logPath = Path.Combine(logDirectory, "update-config.log");
+            var message = string.Join(Environment.NewLine,
+                "==================================================",
+                $"[{DateTimeOffset.Now:O}] Update config load failed",
+                $"ConfigPath: {configPath}",
+                $"Message: {ex.Message}",
+                "Exception:",
+                ex.ToString(),
+                string.Empty);
+
+            File.AppendAllText(logPath, message);
+        }
+        catch
+        {
+            // Keep startup resilient even if diagnostics cannot be written.
         }
     }
 
