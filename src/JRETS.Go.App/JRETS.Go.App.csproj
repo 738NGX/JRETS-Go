@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\JRETS.Go.Core\JRETS.Go.Core.csproj" />
+    <ProjectReference Include="..\JRETS.Go.Updater\JRETS.Go.Updater.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,11 +27,22 @@
     <None Update="Resources\**\*.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\JRETS.Go.Updater\bin\$(Configuration)\net8.0\JRETS.Go.Updater.*"
+          Link="updater\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\JRETS.Go.Updater\bin\$(Configuration)\net8.0\JRETS.Go.Updater.dll')" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>logo256.ico</ApplicationIcon>

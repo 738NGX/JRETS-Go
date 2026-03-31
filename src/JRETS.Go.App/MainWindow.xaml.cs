@@ -79,6 +79,7 @@ public partial class MainWindow : Window
     private string _lineConfigPath;
     private readonly string _offsetsConfigPath;
     private readonly string _linePathMappingsConfigPath;
+    private readonly string _updateConfigPath;
     private readonly FileSystemWatcher _configWatcher;
     private readonly DispatcherTimer _configReloadDebounceTimer;
 
@@ -106,6 +107,11 @@ public partial class MainWindow : Window
     private readonly List<TrainServiceOption> _serviceOptions = [];
     private readonly Dictionary<string, LinePathMappingEntry> _linePathMappingByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly AppConfigurationLoader _appConfigurationLoader = new();
+    private readonly GitHubReleaseUpdateService _githubReleaseUpdateService = new();
+    private readonly LocalReleaseStateStore _localReleaseStateStore = new();
+    private readonly ReleaseAssetStagingService _releaseAssetStagingService = new();
+    private readonly ChannelUpdateApplyService _channelUpdateApplyService = new();
+    private readonly AppUpdateHandoffService _appUpdateHandoffService = new();
     private readonly HashSet<int> _registeredHotKeys = [];
     private static readonly HttpClient _osmHttpClient = CreateOsmHttpClient();
     private readonly Dictionary<string, BitmapImage> _osmTileCache = new(StringComparer.Ordinal);
@@ -169,7 +175,10 @@ public partial class MainWindow : Window
     private int? _lastKnownStopStationId;
     private string? _lastKnownStopStationName;
     private string? _hudStatusMessage;
+    private bool _mandatoryUpdatePending;
     private string? _activeLinePath;
+    private UpdateConfiguration? _updateConfiguration;
+    private CancellationTokenSource? _startupUpdateCheckCancellation;
     private DispatcherTimer? _approachValueAnimationTimer;
     private DispatcherTimer? _approachRealtimeUpdateTimer;
     private DispatcherTimer? _scoreCountupTimer;
@@ -196,6 +205,7 @@ public partial class MainWindow : Window
         _lineConfigPath = _appConfigurationLoader.ResolveLineConfigPath(lineConfigsDirectory);
         _offsetsConfigPath = _appConfigurationLoader.ResolveConfigPath(configsDirectory, "memory-offsets.yaml");
         _linePathMappingsConfigPath = _appConfigurationLoader.ResolveConfigPath(configsDirectory, "lines-path.yaml");
+        _updateConfigPath = _appConfigurationLoader.ResolveConfigPath(configsDirectory, "update.yaml");
 
         var loader = new YamlLineConfigurationLoader();
         _lineConfiguration = loader.LoadFromFile(_lineConfigPath);

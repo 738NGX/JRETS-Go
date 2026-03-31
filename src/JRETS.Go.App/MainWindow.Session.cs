@@ -11,6 +11,16 @@ public partial class MainWindow
 {
     private void StartSession()
     {
+        if (_mandatoryUpdatePending)
+        {
+            _sessionRunning = false;
+            _usingLiveMemory = false;
+            StopLiveMemorySampling();
+            _hudStatusMessage = "检测到强制更新未完成，请先完成更新后再开始运行。";
+            UpdateDisplay();
+            return;
+        }
+
         _hudStatusMessage = null;
 
         if (!_manualSelectionEnabled)

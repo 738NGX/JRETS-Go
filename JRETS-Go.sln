@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JRETS.Go.App", "src\JRETS.G
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JRETS.Go.Core", "src\JRETS.Go.Core\JRETS.Go.Core.csproj", "{846B3E11-10BE-4525-8526-F8FA9EAC930B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JRETS.Go.Updater", "src\JRETS.Go.Updater\JRETS.Go.Updater.csproj", "{004E03CA-94FC-4FDC-9422-192A0421CC36}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,18 @@ Global
 		{846B3E11-10BE-4525-8526-F8FA9EAC930B}.Release|x64.Build.0 = Release|Any CPU
 		{846B3E11-10BE-4525-8526-F8FA9EAC930B}.Release|x86.ActiveCfg = Release|Any CPU
 		{846B3E11-10BE-4525-8526-F8FA9EAC930B}.Release|x86.Build.0 = Release|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Debug|x64.Build.0 = Debug|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Debug|x86.Build.0 = Debug|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Release|Any CPU.Build.0 = Release|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Release|x64.ActiveCfg = Release|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Release|x64.Build.0 = Release|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Release|x86.ActiveCfg = Release|Any CPU
+		{004E03CA-94FC-4FDC-9422-192A0421CC36}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,6 +64,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{B3E342E8-F056-4C7F-B67B-BD38B331B1A3} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{846B3E11-10BE-4525-8526-F8FA9EAC930B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{004E03CA-94FC-4FDC-9422-192A0421CC36} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
-

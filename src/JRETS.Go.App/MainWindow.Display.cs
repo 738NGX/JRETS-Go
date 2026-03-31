@@ -25,6 +25,8 @@ public partial class MainWindow
 
     private void UpdateDisplay()
     {
+        ApplyMandatoryUpdateGateUi();
+
         var snapshot = GetCurrentSnapshot();
         _activeLinePath = snapshot.LinePath;
         TrackSessionDistance(snapshot);
@@ -136,6 +138,17 @@ public partial class MainWindow
 
         UpdateMemoryDebugText(snapshot);
         RequestMapRender(snapshot, state);
+    }
+
+    private void ApplyMandatoryUpdateGateUi()
+    {
+        StartSessionButton.IsEnabled = !_mandatoryUpdatePending;
+        EndSessionButton.IsEnabled = _sessionRunning;
+
+        if (_mandatoryUpdatePending && string.IsNullOrWhiteSpace(_hudStatusMessage))
+        {
+            _hudStatusMessage = "检测到强制更新未完成，请先完成更新后再开始运行。";
+        }
     }
 
     private bool TryGetHudStatusMessage(out string message)

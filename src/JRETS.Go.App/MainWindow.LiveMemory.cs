@@ -189,6 +189,7 @@ public partial class MainWindow
     {
         LoadLineConfigurationOptions();
         LoadLinePathMappings();
+        LoadUpdateConfiguration();
 
         _stopScoringService = new StopScoringService();
 
@@ -197,6 +198,25 @@ public partial class MainWindow
         _memoryDataSource = null;
 
         _memoryDataSource = _appConfigurationLoader.CreateMemoryDataSource(_offsetsConfigPath);
+    }
+
+    private void LoadUpdateConfiguration()
+    {
+        try
+        {
+            if (!File.Exists(_updateConfigPath))
+            {
+                _updateConfiguration = null;
+                return;
+            }
+
+            _updateConfiguration = _appConfigurationLoader.LoadUpdateConfiguration(_updateConfigPath);
+        }
+        catch (Exception ex)
+        {
+            _updateConfiguration = null;
+            _lastDataSourceError = $"Update config load failed: {ex.Message}";
+        }
     }
 
     private void LoadLinePathMappings()

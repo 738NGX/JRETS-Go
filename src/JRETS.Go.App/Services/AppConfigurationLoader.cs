@@ -93,6 +93,15 @@ public sealed class AppConfigurationLoader
         return new ProcessMemoryRealtimeDataSource(offsets);
     }
 
+    public UpdateConfiguration LoadUpdateConfiguration(string updateConfigPath)
+    {
+        var updateLoader = new YamlUpdateConfigurationLoader();
+        var config = updateLoader.LoadFromFile(updateConfigPath);
+
+        ValidateUpdateConfiguration(config);
+        return config;
+    }
+
     public string ResolveConfigPath(string configsDirectory, string fileName)
     {
         return ResolveConfigPath(configsDirectory, fileName, fileName);
@@ -137,6 +146,38 @@ public sealed class AppConfigurationLoader
         }
 
         return preferredPath;
+    }
+
+    private static void ValidateUpdateConfiguration(UpdateConfiguration config)
+    {
+        if (string.IsNullOrWhiteSpace(config.GitHub.Owner)
+            || string.IsNullOrWhiteSpace(config.GitHub.Repo))
+        {
+            throw new InvalidOperationException("update.github.owner and update.github.repo are required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(config.ReleaseStateAssetName))
+        {
+            throw new InvalidOperationException("update.release_state_asset_name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(config.App.AssetPattern)
+            || string.IsNullOrWhiteSpace(config.Configs.AssetPattern)
+            || string.IsNullOrWhiteSpace(config.Audio.ManifestName)
+            || string.IsNullOrWhiteSpace(config.Audio.PackagePattern))
+        {
+            throw new InvalidOperationException("update channels are missing required asset settings.");
+        }
+
+        if (config.CheckTimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException("update.check_timeout_seconds must be greater than 0.");
+        }
+
+        if (config.MaxRetryCount < 0)
+        {
+            throw new InvalidOperationException("update.max_retry_count must be 0 or greater.");
+        }
     }
 }
 

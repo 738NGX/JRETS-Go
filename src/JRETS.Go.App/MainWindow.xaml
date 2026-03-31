@@ -464,12 +464,14 @@
                                    Margin="0,0,0,8"/>
 
                         <WrapPanel Margin="0,0,0,8">
-                            <Button Content="運転開始 / Start (F9)"
+                            <Button x:Name="StartSessionButton"
+                                Content="運転開始 / Start (F9)"
                                     Click="StartSessionClick"
                                     Width="142"
                                     Height="32"
                                     Margin="0,0,8,0"/>
-                            <Button Content="運転終了 / End (F10)"
+                            <Button x:Name="EndSessionButton"
+                                Content="運転終了 / End (F10)"
                                     Click="EndSessionClick"
                                     Width="142"
                                     Height="32"

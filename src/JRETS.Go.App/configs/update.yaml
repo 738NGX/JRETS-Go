@@ -1,0 +1,25 @@
+github:
+  owner: 738NGX
+  repo: JRETS-Go
+
+release_state_asset_name: release-state.json
+
+mandatory: true
+include_prerelease: false
+check_timeout_seconds: 30
+max_retry_count: 3
+
+app:
+  asset_pattern: app-win-x86.zip
+  checksum_name: checksums.txt
+
+configs:
+  asset_pattern: configs.zip
+  checksum_name: checksums.txt
+
+audio:
+  asset_pattern: audio-files-*.zip
+  manifest_name: audio-manifest.json
+  package_pattern: audio-files-*.zip
+  checksum_name: checksums.txt
+  require_full_on_first_install: true
