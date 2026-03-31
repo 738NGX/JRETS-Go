@@ -202,6 +202,38 @@ powershell -ExecutionPolicy Bypass -File scripts/Build-OneClickRelease.ps1 `
 
 客户端启动时会自动检测到这些删除指令并清理本地文件。
 
+### 增量音频打包（推荐）
+
+当前一键脚本已支持音频增量模式，不需要按线路拆很多包。做法是：
+
+1. 读取上一版 `audio-manifest.json`（作为对比基线）
+2. 仅把“新增/被修改”的文件打入 `audio-files-*.zip`
+3. 自动把“上一版存在、当前已删除”的文件写入 `deleteFiles`
+4. 自动按体积分片（默认 80MB/包），避免单包过大
+
+示例：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/Build-OneClickRelease.ps1 `
+  -ReleaseDir .\artifacts\release `
+  -AppVersion 1.2.0 `
+  -ConfigsVersion 2026.04.15.1 `
+  -AudioPackVersion 2026.04.20.1 `
+  -AudioPackageMode delta `
+  -PreviousAudioManifestPath .\artifacts\prev\audio-manifest.json
+```
+
+可选参数：
+
+1. `-AudioPackageMode full|delta`：默认 `full`，建议发版使用 `delta`
+2. `-AudioPackageMaxSizeMb`：单个音频包最大体积，默认 `80`
+
+说明：
+
+1. 修改旧线路音频文件时，只要文件内容变了（SHA256 变化），就会自动进入增量包并覆盖客户端旧文件。
+2. 删除旧音频文件时，会自动写入 `deleteFiles`，客户端应用更新时会删除本地文件。
+3. 若本次仅删除无新增，脚本会生成最小占位包，保证更新通道资产校验通过。
+
 ### 应用端行为
 
 客户端应用重启时，如果检测到新的 audioPackVersion：
