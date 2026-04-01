@@ -15,7 +15,11 @@ public sealed class MemoryOffsets
 
     public required long DoorState { get; init; }
 
-    public required long MainClockSeconds { get; init; }
+    public required long CurrentTimeSeconds { get; init; }
+
+    public required long CurrentTimeMinutes { get; init; }
+
+    public required long CurrentTimeHours { get; init; }
 
     public required long TimetableSecond { get; init; }
 

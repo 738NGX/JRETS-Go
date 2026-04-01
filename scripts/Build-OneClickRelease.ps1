@@ -73,9 +73,18 @@ function Get-AudioRelativePath {
         [string]$FilePath
     )
 
-    $baseUri = [System.Uri]((Resolve-Path -LiteralPath $BaseDirectory).Path.TrimEnd('\\') + '\\')
-    $fileUri = [System.Uri](Resolve-Path -LiteralPath $FilePath).Path
-    return $baseUri.MakeRelativeUri([System.Uri]$fileUri).ToString().Replace('%20', ' ')
+    $basePath = (Resolve-Path -LiteralPath $BaseDirectory).Path.TrimEnd('\\')
+    $filePath = (Resolve-Path -LiteralPath $FilePath).Path
+
+    $baseUri = [System.Uri]("file:///" + $basePath.Replace('\\', '/') + "/")
+    $fileUri = [System.Uri]("file:///" + $filePath.Replace('\\', '/'))
+    $relativePath = $baseUri.MakeRelativeUri($fileUri).ToString().Replace('%20', ' ')
+
+    if ($relativePath.StartsWith('../', [System.StringComparison]::Ordinal) -or $relativePath.StartsWith('..\\', [System.StringComparison]::Ordinal)) {
+        throw "Audio file is outside of audio root: $FilePath"
+    }
+
+    return $relativePath
 }
 
 function New-AudioPackage {

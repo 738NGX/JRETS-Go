@@ -81,6 +81,9 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
         }
 
         var values = ReadSnapshotValues();
+        var mainClockSeconds = (values.CurrentTimeHours * 3600)
+            + (values.CurrentTimeMinutes * 60)
+            + values.CurrentTimeSeconds;
 
         return new RealtimeSnapshot
         {
@@ -89,7 +92,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
             // Game door state is non-binary on some lines (e.g. transient 44 when opening).
             // Treat any non-zero value as "door open" at snapshot level.
             DoorOpen = values.DoorState != 0,
-            MainClockSeconds = values.MainClockSeconds,
+            MainClockSeconds = mainClockSeconds,
             TimetableHour = values.TimetableHour,
             TimetableMinute = values.TimetableMinute,
             TimetableSecond = values.TimetableSecond,
@@ -117,7 +120,9 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
         {
             NextStationId = ReadInt32(segmentBuffers, _snapshotReadPlan.NextStationIdField),
             DoorState = ReadByte(segmentBuffers, _snapshotReadPlan.DoorStateField),
-            MainClockSeconds = ReadInt32(segmentBuffers, _snapshotReadPlan.MainClockSecondsField),
+            CurrentTimeSeconds = ReadInt32(segmentBuffers, _snapshotReadPlan.CurrentTimeSecondsField),
+            CurrentTimeMinutes = ReadInt32(segmentBuffers, _snapshotReadPlan.CurrentTimeMinutesField),
+            CurrentTimeHours = ReadInt32(segmentBuffers, _snapshotReadPlan.CurrentTimeHoursField),
             TimetableSecond = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableSecondField),
             TimetableMinute = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableMinuteField),
             TimetableHour = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableHourField),
@@ -167,7 +172,9 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
         {
             new("next_station_id", offsets.NextStationId, 4),
             new("door_state", offsets.DoorState, 1),
-            new("main_clock_seconds", offsets.MainClockSeconds, 4),
+            new("current_time_seconds", offsets.CurrentTimeSeconds, 4),
+            new("current_time_minutes", offsets.CurrentTimeMinutes, 4),
+            new("current_time_hours", offsets.CurrentTimeHours, 4),
             new("timetable_second", offsets.TimetableSecond, 4),
             new("timetable_minute", offsets.TimetableMinute, 4),
             new("timetable_hour", offsets.TimetableHour, 4),
@@ -212,7 +219,9 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
             segments,
             fieldInfos["next_station_id"],
             fieldInfos["door_state"],
-            fieldInfos["main_clock_seconds"],
+            fieldInfos["current_time_seconds"],
+            fieldInfos["current_time_minutes"],
+            fieldInfos["current_time_hours"],
             fieldInfos["timetable_second"],
             fieldInfos["timetable_minute"],
             fieldInfos["timetable_hour"],
@@ -244,7 +253,11 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
 
         public required byte DoorState { get; init; }
 
-        public required int MainClockSeconds { get; init; }
+        public required int CurrentTimeSeconds { get; init; }
+
+        public required int CurrentTimeMinutes { get; init; }
+
+        public required int CurrentTimeHours { get; init; }
 
         public required int TimetableSecond { get; init; }
 
@@ -280,7 +293,9 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
         IReadOnlyList<ReadSegment> Segments,
         FieldReadInfo NextStationIdField,
         FieldReadInfo DoorStateField,
-        FieldReadInfo MainClockSecondsField,
+        FieldReadInfo CurrentTimeSecondsField,
+        FieldReadInfo CurrentTimeMinutesField,
+        FieldReadInfo CurrentTimeHoursField,
         FieldReadInfo TimetableSecondField,
         FieldReadInfo TimetableMinuteField,
         FieldReadInfo TimetableHourField,

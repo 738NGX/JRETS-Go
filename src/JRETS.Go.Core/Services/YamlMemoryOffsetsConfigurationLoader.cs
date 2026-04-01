@@ -40,7 +40,9 @@ public sealed class YamlMemoryOffsetsConfigurationLoader
             {
                 NextStationId = ParseOffset(yaml.Offsets.NextStationId, nameof(yaml.Offsets.NextStationId)),
                 DoorState = ParseOffset(yaml.Offsets.DoorState, nameof(yaml.Offsets.DoorState)),
-                MainClockSeconds = ParseOffset(yaml.Offsets.MainClockSeconds, nameof(yaml.Offsets.MainClockSeconds)),
+                CurrentTimeSeconds = ParseOffset(yaml.Offsets.CurrentTimeSeconds, nameof(yaml.Offsets.CurrentTimeSeconds)),
+                CurrentTimeMinutes = ParseOffset(yaml.Offsets.CurrentTimeMinutes, nameof(yaml.Offsets.CurrentTimeMinutes)),
+                CurrentTimeHours = ParseOffset(yaml.Offsets.CurrentTimeHours, nameof(yaml.Offsets.CurrentTimeHours)),
                 TimetableSecond = ParseOffset(yaml.Offsets.TimetableSecond, nameof(yaml.Offsets.TimetableSecond)),
                 TimetableMinute = ParseOffset(yaml.Offsets.TimetableMinute, nameof(yaml.Offsets.TimetableMinute)),
                 TimetableHour = ParseOffset(yaml.Offsets.TimetableHour, nameof(yaml.Offsets.TimetableHour)),
@@ -96,7 +98,11 @@ public sealed class YamlMemoryOffsetsConfigurationLoader
 
         public string? DoorState { get; init; }
 
-        public string? MainClockSeconds { get; init; }
+        public string? CurrentTimeSeconds { get; init; }
+
+        public string? CurrentTimeMinutes { get; init; }
+
+        public string? CurrentTimeHours { get; init; }
 
         public string? TimetableSecond { get; init; }
 
