@@ -11,4 +11,28 @@ paths:
   - yamanote/yamanote_in_osaki/1208G.tse:
       - line_id: yamanote
         train_id: 876G
+        diagram_id: 1208G
+  - tokaido/tokyo_ito/1525E.tse:
+      - line_id: tokaido
+        train_id: 1525E
+  - tokaido/tokyo_ito/1531E.tse:
+      - line_id: tokaido
+        train_id: 1531E
+  - tokaido/tokyo_ito/1865E.tse:
+      - line_id: tokaido
+        train_id: 1865E
+  - tokaido/tokyo_ito/1567E.tse:
+      - line_id: tokaido
+        train_id: 1567E
+  - tokaido/tokyo_ito/3535E.tse:
+      - line_id: tokaido
+        train_id: 3535E
+  - tokaido/tokyo_ito/521M.tse:
+      - line_id: tokaido
+        train_id: 1865E
+        diagram_id: 521M
+  - tokaido/tokyo_ito/3023M.tse:
+      - line_id: tokaido
+        train_id: 3023M
+
   

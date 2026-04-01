@@ -1,0 +1,179 @@
+{
+  "30101": {
+    "name": "東京",
+    "displacement": 0.0,
+    "coordinates": [
+      139.7671827,
+      35.6811274
+    ],
+    "labeled": true
+  },
+  "30102": {
+    "name": "新橋",
+    "displacement": 1.9001,
+    "coordinates": [
+      139.7585094,
+      35.6662033
+    ]
+  },
+  "30103": {
+    "name": "品川",
+    "displacement": 6.7071,
+    "coordinates": [
+      139.7394895,
+      35.6286923
+    ],
+    "labeled": true
+  },
+  "30104": {
+    "name": "川崎",
+    "displacement": 18.3733,
+    "coordinates": [
+      139.697085,
+      35.5312563
+    ],
+    "labeled": true
+  },
+  "30105": {
+    "name": "横浜",
+    "displacement": 28.7452,
+    "coordinates": [
+      139.6222924,
+      35.4657967
+    ],
+    "labeled": true
+  },
+  "30106": {
+    "name": "戸塚",
+    "displacement": 40.8032,
+    "coordinates": [
+      139.534299,
+      35.4005828
+    ]
+  },
+  "30107": {
+    "name": "大船",
+    "displacement": 46.1298,
+    "coordinates": [
+      139.5313149,
+      35.3543348
+    ],
+    "labeled": true
+  },
+  "30108": {
+    "name": "藤沢",
+    "displacement": 51.0587,
+    "coordinates": [
+      139.4862632,
+      35.3386826
+    ]
+  },
+  "30109": {
+    "name": "辻堂",
+    "displacement": 54.6792,
+    "coordinates": [
+      139.4464206,
+      35.3367611
+    ]
+  },
+  "30110": {
+    "name": "茅ヶ崎",
+    "displacement": 58.3265,
+    "coordinates": [
+      139.407581,
+      35.3304237
+    ]
+  },
+  "30111": {
+    "name": "平塚",
+    "displacement": 63.8148,
+    "coordinates": [
+      139.3492239,
+      35.3272631
+    ],
+    "labeled": true
+  },
+  "30112": {
+    "name": "大磯",
+    "displacement": 67.5765,
+    "coordinates": [
+      139.3134213,
+      35.3112739
+    ]
+  },
+  "30113": {
+    "name": "二宮",
+    "displacement": 72.8921,
+    "coordinates": [
+      139.2576496,
+      35.2987247
+    ]
+  },
+  "30114": {
+    "name": "国府津",
+    "displacement": 77.3339,
+    "coordinates": [
+      139.2142253,
+      35.2812092
+    ],
+    "labeled": true
+  },
+  "30115": {
+    "name": "鴨宮",
+    "displacement": 80.4781,
+    "coordinates": [
+      139.180261,
+      35.2756843
+    ]
+  },
+  "30116": {
+    "name": "小田原",
+    "displacement": 83.6787,
+    "coordinates": [
+      139.1559528,
+      35.2560903
+    ],
+    "labeled": true
+  },
+  "30117": {
+    "name": "早川",
+    "displacement": 85.798,
+    "coordinates": [
+      139.1452615,
+      35.2391902
+    ]
+  },
+  "30118": {
+    "name": "根府川",
+    "displacement": 90.151,
+    "coordinates": [
+      139.1387847,
+      35.2026371
+    ]
+  },
+  "30119": {
+    "name": "真鶴",
+    "displacement": 95.629,
+    "coordinates": [
+      139.1323205,
+      35.1568983
+    ]
+  },
+  "30120": {
+    "name": "湯河原",
+    "displacement": 98.9013,
+    "coordinates": [
+      139.1022302,
+      35.1461985
+    ]
+  },
+  "30121": {
+    "name": "熱海",
+    "displacement": 104.4027,
+    "coordinates": [
+      139.0781781,
+      35.1037872
+    ],
+    "labeled": true
+  }
+}

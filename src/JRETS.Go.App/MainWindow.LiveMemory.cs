@@ -39,7 +39,7 @@ public partial class MainWindow
             try
             {
                 _lastDataSourceError = string.Empty;
-                var snapshot = _memoryDataSource.GetSnapshot();
+                var snapshot = ReadLiveMemorySnapshotWithStationPolicy();
                 SetLatestLiveMemorySnapshot(snapshot);
                 return snapshot;
             }
@@ -82,7 +82,7 @@ public partial class MainWindow
 
                 try
                 {
-                    var snapshot = _memoryDataSource.GetSnapshot();
+                    var snapshot = ReadLiveMemorySnapshotWithStationPolicy();
                     SetLatestLiveMemorySnapshot(snapshot);
                     delayMs = _sessionRunning ? GetLiveMemorySamplingDelayMs(snapshot) : LiveMemorySamplingCruiseIntervalMs;
                 }
@@ -150,6 +150,8 @@ public partial class MainWindow
             _latestLiveMemorySnapshot = null;
             _latestLiveMemorySnapshotAtUtc = DateTime.MinValue;
             _liveMemorySamplingLastError = null;
+            _liveStationAnchorId = null;
+            _lastLiveDoorOpen = null;
         }
     }
 
@@ -292,6 +294,128 @@ public partial class MainWindow
         }
     }
 
+    private RealtimeSnapshot ReadLiveMemorySnapshotWithStationPolicy()
+    {
+        if (_memoryDataSource is null)
+        {
+            throw new InvalidOperationException("Memory data source is not initialized.");
+        }
+
+        lock (_liveSnapshotSync)
+        {
+            if (!_liveStationAnchorId.HasValue)
+            {
+                var initial = _memoryDataSource.GetSnapshot();
+                var initialAnchor = IsConfiguredStationId(initial.NextStationId)
+                    ? initial.NextStationId
+                    : ResolveFallbackAnchorStationId();
+
+                _liveStationAnchorId = initialAnchor;
+                _lastLiveDoorOpen = initial.DoorOpen;
+
+                if (initial.NextStationId == initialAnchor)
+                {
+                    return initial;
+                }
+
+                return CloneSnapshotWithStationId(initial, initialAnchor);
+            }
+
+            var anchorStationId = _liveStationAnchorId.Value;
+            var lightweight = _memoryDataSource.GetSnapshotWithoutStationId(anchorStationId);
+            var previousDoorOpen = _lastLiveDoorOpen ?? lightweight.DoorOpen;
+
+            if (previousDoorOpen && !lightweight.DoorOpen)
+            {
+                // Refresh station anchor exactly once at departure edge.
+                var refreshed = _memoryDataSource.GetSnapshot();
+                if (IsConfiguredStationId(refreshed.NextStationId))
+                {
+                    _liveStationAnchorId = refreshed.NextStationId;
+                    _lastLiveDoorOpen = refreshed.DoorOpen;
+                    return refreshed;
+                }
+
+                _lastLiveDoorOpen = refreshed.DoorOpen;
+                return CloneSnapshotWithStationId(refreshed, _liveStationAnchorId.Value);
+            }
+
+            if (!previousDoorOpen && lightweight.DoorOpen)
+            {
+                var advancedAnchor = ResolveNextAnchorStationId(anchorStationId);
+                _liveStationAnchorId = advancedAnchor;
+                _lastLiveDoorOpen = true;
+                return CloneSnapshotWithStationId(lightweight, advancedAnchor);
+            }
+
+            _lastLiveDoorOpen = lightweight.DoorOpen;
+            return lightweight;
+        }
+    }
+
+    private bool IsConfiguredStationId(int stationId)
+    {
+        return _lineConfiguration.Stations.Any(x => x.Id == stationId);
+    }
+
+    private int ResolveFallbackAnchorStationId()
+    {
+        if (_lineConfiguration.Stations.Count > 0)
+        {
+            return _lineConfiguration.Stations[0].Id;
+        }
+
+        return 0;
+    }
+
+    private int ResolveNextAnchorStationId(int currentAnchorStationId)
+    {
+        var stations = _lineConfiguration.Stations;
+        if (stations.Count == 0)
+        {
+            return currentAnchorStationId;
+        }
+
+        var currentIndex = -1;
+        for (var i = 0; i < stations.Count; i++)
+        {
+            if (stations[i].Id == currentAnchorStationId)
+            {
+                currentIndex = i;
+                break;
+            }
+        }
+
+        if (currentIndex < 0)
+        {
+            return ResolveFallbackAnchorStationId();
+        }
+
+        if (currentIndex < stations.Count - 1)
+        {
+            return stations[currentIndex + 1].Id;
+        }
+
+        return _lineConfiguration.LineInfo.IsLoop ? stations[0].Id : stations[currentIndex].Id;
+    }
+
+    private static RealtimeSnapshot CloneSnapshotWithStationId(RealtimeSnapshot source, int stationId)
+    {
+        return new RealtimeSnapshot
+        {
+            CapturedAt = source.CapturedAt,
+            NextStationId = stationId,
+            DoorOpen = source.DoorOpen,
+            MainClockSeconds = source.MainClockSeconds,
+            TimetableHour = source.TimetableHour,
+            TimetableMinute = source.TimetableMinute,
+            TimetableSecond = source.TimetableSecond,
+            CurrentDistanceMeters = source.CurrentDistanceMeters,
+            TargetStopDistanceMeters = source.TargetStopDistanceMeters,
+            LinePath = source.LinePath
+        };
+    }
+
     private void ApplyLineConfiguration(LineConfigurationOption option)
     {
         _lineConfigPath = option.FilePath;
@@ -302,6 +426,12 @@ public partial class MainWindow
             TryLoadDebugStationDisplacementsMeters(_lineConfiguration));
         _timelineInitialized = false;
         PopulateServiceOptions();
+
+        lock (_liveSnapshotSync)
+        {
+            _liveStationAnchorId = null;
+            _lastLiveDoorOpen = null;
+        }
 
         if (_sessionRunning && !_usingLiveMemory)
         {

@@ -15,6 +15,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
 
     private readonly MemoryOffsetsConfiguration _configuration;
     private readonly SnapshotReadPlan _snapshotReadPlan;
+    private readonly SnapshotReadPlan _snapshotReadPlanWithoutStationId;
 
     private Process? _process;
     private nint _processHandle;
@@ -26,6 +27,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
     {
         _configuration = configuration;
         _snapshotReadPlan = BuildSnapshotReadPlan(configuration.Offsets);
+        _snapshotReadPlanWithoutStationId = BuildSnapshotReadPlanWithoutStationId(configuration.Offsets);
     }
 
     public bool TryAttach()
@@ -80,7 +82,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
             throw new InvalidOperationException(LastAttachError);
         }
 
-        var values = ReadSnapshotValues();
+        var values = ReadSnapshotValues(_snapshotReadPlan, includeStationId: true);
         var mainClockSeconds = (values.CurrentTimeHours * 3600)
             + (values.CurrentTimeMinutes * 60)
             + values.CurrentTimeSeconds;
@@ -102,32 +104,63 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
         };
     }
 
-    private SnapshotValues ReadSnapshotValues()
+    public RealtimeSnapshot GetSnapshotWithoutStationId(int fallbackStationId)
+    {
+        if ((_process is null || _process.HasExited || _processHandle == nint.Zero) && !TryAttach())
+        {
+            throw new InvalidOperationException(LastAttachError);
+        }
+
+        var values = ReadSnapshotValues(_snapshotReadPlanWithoutStationId, includeStationId: false);
+        var mainClockSeconds = (values.CurrentTimeHours * 3600)
+            + (values.CurrentTimeMinutes * 60)
+            + values.CurrentTimeSeconds;
+
+        return new RealtimeSnapshot
+        {
+            CapturedAt = DateTime.Now,
+            NextStationId = fallbackStationId,
+            // Game door state is non-binary on some lines (e.g. transient 44 when opening).
+            // Treat any non-zero value as "door open" at snapshot level.
+            DoorOpen = values.DoorState != 0,
+            MainClockSeconds = mainClockSeconds,
+            TimetableHour = values.TimetableHour,
+            TimetableMinute = values.TimetableMinute,
+            TimetableSecond = values.TimetableSecond,
+            CurrentDistanceMeters = values.CurrentDistanceMeters,
+            TargetStopDistanceMeters = values.TargetStopDistanceMeters,
+            LinePath = values.LinePath
+        };
+    }
+
+    private SnapshotValues ReadSnapshotValues(SnapshotReadPlan readPlan, bool includeStationId)
     {
         if (_processHandle == nint.Zero)
         {
             throw new InvalidOperationException("Process is not attached.");
         }
 
-        var segmentBuffers = new byte[_snapshotReadPlan.Segments.Count][];
-        for (var i = 0; i < _snapshotReadPlan.Segments.Count; i++)
+        var segmentBuffers = new byte[readPlan.Segments.Count][];
+        for (var i = 0; i < readPlan.Segments.Count; i++)
         {
-            var segment = _snapshotReadPlan.Segments[i];
+            var segment = readPlan.Segments[i];
             segmentBuffers[i] = ReadBytes(segment.StartOffset, segment.Size);
         }
 
         return new SnapshotValues
         {
-            NextStationId = ReadInt32(segmentBuffers, _snapshotReadPlan.NextStationIdField),
-            DoorState = ReadByte(segmentBuffers, _snapshotReadPlan.DoorStateField),
-            CurrentTimeSeconds = ReadInt32(segmentBuffers, _snapshotReadPlan.CurrentTimeSecondsField),
-            CurrentTimeMinutes = ReadInt32(segmentBuffers, _snapshotReadPlan.CurrentTimeMinutesField),
-            CurrentTimeHours = ReadInt32(segmentBuffers, _snapshotReadPlan.CurrentTimeHoursField),
-            TimetableSecond = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableSecondField),
-            TimetableMinute = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableMinuteField),
-            TimetableHour = ReadInt32(segmentBuffers, _snapshotReadPlan.TimetableHourField),
-            CurrentDistanceMeters = ReadDouble(segmentBuffers, _snapshotReadPlan.CurrentDistanceField),
-            TargetStopDistanceMeters = ReadDouble(segmentBuffers, _snapshotReadPlan.TargetStopDistanceField),
+            NextStationId = includeStationId && readPlan.NextStationIdField is FieldReadInfo nextStationField
+                ? ReadInt32(segmentBuffers, nextStationField)
+                : 0,
+            DoorState = ReadByte(segmentBuffers, readPlan.DoorStateField),
+            CurrentTimeSeconds = ReadInt32(segmentBuffers, readPlan.CurrentTimeSecondsField),
+            CurrentTimeMinutes = ReadInt32(segmentBuffers, readPlan.CurrentTimeMinutesField),
+            CurrentTimeHours = ReadInt32(segmentBuffers, readPlan.CurrentTimeHoursField),
+            TimetableSecond = ReadInt32(segmentBuffers, readPlan.TimetableSecondField),
+            TimetableMinute = ReadInt32(segmentBuffers, readPlan.TimetableMinuteField),
+            TimetableHour = ReadInt32(segmentBuffers, readPlan.TimetableHourField),
+            CurrentDistanceMeters = ReadDouble(segmentBuffers, readPlan.CurrentDistanceField),
+            TargetStopDistanceMeters = ReadDouble(segmentBuffers, readPlan.TargetStopDistanceField),
             LinePath = ReadLinePath(_configuration.Offsets.LinePath)
         };
     }
@@ -229,6 +262,68 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
             fieldInfos["target_stop_distance"]);
     }
 
+    private static SnapshotReadPlan BuildSnapshotReadPlanWithoutStationId(MemoryOffsets offsets)
+    {
+        var fields = new List<FieldDefinition>
+        {
+            new("door_state", offsets.DoorState, 1),
+            new("current_time_seconds", offsets.CurrentTimeSeconds, 4),
+            new("current_time_minutes", offsets.CurrentTimeMinutes, 4),
+            new("current_time_hours", offsets.CurrentTimeHours, 4),
+            new("timetable_second", offsets.TimetableSecond, 4),
+            new("timetable_minute", offsets.TimetableMinute, 4),
+            new("timetable_hour", offsets.TimetableHour, 4),
+            new("current_distance", offsets.CurrentDistance, 8),
+            new("target_stop_distance", offsets.TargetStopDistance, 8)
+        };
+
+        fields.Sort((a, b) => a.Offset.CompareTo(b.Offset));
+
+        var segments = new List<ReadSegment>();
+        var fieldInfos = new Dictionary<string, FieldReadInfo>(StringComparer.Ordinal);
+
+        foreach (var field in fields)
+        {
+            if (segments.Count == 0)
+            {
+                var firstSegment = new ReadSegment(field.Offset, field.Size);
+                segments.Add(firstSegment);
+                fieldInfos[field.Name] = new FieldReadInfo(0, 0);
+                continue;
+            }
+
+            var lastIndex = segments.Count - 1;
+            var lastSegment = segments[lastIndex];
+            var lastEndExclusive = lastSegment.StartOffset + lastSegment.Size;
+            var fieldEndExclusive = field.Offset + field.Size;
+
+            if (field.Offset <= lastEndExclusive + MergeAdjacentGapBytes)
+            {
+                var newEndExclusive = Math.Max(lastEndExclusive, fieldEndExclusive);
+                lastSegment.Size = (int)(newEndExclusive - lastSegment.StartOffset);
+                fieldInfos[field.Name] = new FieldReadInfo(lastIndex, (int)(field.Offset - lastSegment.StartOffset));
+                continue;
+            }
+
+            var nextSegment = new ReadSegment(field.Offset, field.Size);
+            segments.Add(nextSegment);
+            fieldInfos[field.Name] = new FieldReadInfo(segments.Count - 1, 0);
+        }
+
+        return new SnapshotReadPlan(
+            segments,
+            null,
+            fieldInfos["door_state"],
+            fieldInfos["current_time_seconds"],
+            fieldInfos["current_time_minutes"],
+            fieldInfos["current_time_hours"],
+            fieldInfos["timetable_second"],
+            fieldInfos["timetable_minute"],
+            fieldInfos["timetable_hour"],
+            fieldInfos["current_distance"],
+            fieldInfos["target_stop_distance"]);
+    }
+
     private byte[] ReadBytes(long relativeOffset, int byteCount)
     {
         if (_processHandle == nint.Zero)
@@ -291,7 +386,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
 
     private sealed record SnapshotReadPlan(
         IReadOnlyList<ReadSegment> Segments,
-        FieldReadInfo NextStationIdField,
+        FieldReadInfo? NextStationIdField,
         FieldReadInfo DoorStateField,
         FieldReadInfo CurrentTimeSecondsField,
         FieldReadInfo CurrentTimeMinutesField,

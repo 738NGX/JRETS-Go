@@ -4,3 +4,208 @@ line_info:
   name_en: Tokaido Line
   line_color: "#F08727"
   code: JT
+train_info:
+  - id: 1525E
+    type: 普通
+    terminal: 30116
+  - id: 1531E
+    type: 普通
+    terminal: 30114
+  - id: 1865E
+    type: 普通
+    terminal: 30121
+  - id: 1567E
+    type: 普通
+    terminal: 30111
+  - id: 3535E
+    type: 快速アクティ―
+    terminal: 30121
+  - id: 3023M
+    type: 特急 踊り子3号
+    terminal: 30121
+map_info:
+  stations: tokaido_stations.json
+  route: tokaido_route.json
+stations:
+  - id: 30101
+    number: 1
+    name_jp: 東京
+    name_en: Tōkyō
+    code: TYO
+    melody:
+      - JRE-IKST-021-02.mp3
+      - ドリーム・パーク.mp3
+  - id: 30102
+    number: 2
+    name_jp: 新橋
+    name_en: Shimbashi
+    code: SMB
+    melody:
+      - JRE-IKST-021-02.mp3
+      - 春風V1.mp3
+    skip_train:
+      - 3023M
+  - id: 30103
+    number: 3
+    name_jp: 品川
+    name_en: Shinagawa
+    code: SGW
+    melody:
+      - JRE-IKST-021-02.mp3
+      - JRE-IKST-021-06.mp3
+      - ナイスガイ！.mp3
+      - 鉄道唱歌B.mp3
+  - id: 30104
+    number: 4
+    name_jp: 川崎
+    name_en: Kawasaki
+    code: KWS
+    melody:
+      - 上を向いて歩こうVer.A.mp3
+  - id: 30105
+    number: 5
+    name_jp: 横浜
+    name_en: Yokohama
+    code: YHM
+    melody:
+      - JRE-IKST-021-02.mp3
+      - JRE-IKST-021-06.mp3
+      - JR-SH2-3.mp3
+  - id: 30106
+    number: 6
+    name_jp: 戸塚
+    name_en: Totsuka
+    code: TTK
+    skip_train:
+      - 3023M
+    melody:
+      - JRE-IKST-021-02.mp3
+      - Cielo Estrellado.mp3
+  - id: 30107
+    number: 7
+    name_jp: 大船
+    name_en: Ōfuna
+    code: OFN
+    melody:
+      - JRE-IKST-021-02.mp3
+      - Cielo Estrellado.mp3
+  - id: 30108
+    number: 8
+    name_jp: 藤沢
+    name_en: Fujisawa
+    skip_train:
+      - 3023M
+    melody:
+      - JRE-IKST-021-08.mp3
+      - 藤沢市歌VerB.mp3
+      - チャイム3B5.mp3
+  - id: 30109
+    number: 9
+    name_jp: 辻堂
+    name_en: Tsujidō
+    skip_train:
+      - 3023M
+      - 3535E
+    melody:
+      - 浜辺の歌Ver.B.mp3
+  - id: 30110
+    number: 10
+    name_jp: 茅ヶ崎
+    name_en: Chigasaki
+    skip_train:
+      - 3023M
+    melody:
+      - JRE-IKST-021-08.mp3
+      - 希望の轍verB.mp3
+  - id: 30111
+    number: 11
+    name_jp: 平塚
+    name_en: Hiratsuka
+    skip_train:
+      - 3023M
+    melody:
+      - たなばたさまVer.D.mp3
+  - id: 30112
+    number: 12
+    name_jp: 大磯
+    name_en: Ōiso
+    skip_train:
+      - 3023M
+      - 3535E
+    melody:
+      - JRE-IKST-021-02.mp3
+      - Cielo Estrellado.mp3
+  - id: 30113
+    number: 13
+    name_jp: 二宮
+    name_en: Ninomiya
+    skip_train:
+      - 3023M
+      - 3535E
+    melody:
+      - 朧月夜Ver.B.mp3
+  - id: 30114
+    number: 14
+    name_jp: 国府津
+    name_en: Kōzu
+    skip_train:
+      - 3023M
+    melody:
+      - みかんの花咲く丘V1.mp3
+      - みかんの花咲く丘V2.mp3
+  - id: 30115
+    number: 15
+    name_jp: 鴨宮
+    name_en: Kamonomiya
+    skip_train:
+      - 3023M
+      - 3535E
+    melody:
+      - JRE-IKST-021-02.mp3
+      - Cielo Estrellado.mp3
+  - id: 30116
+    number: 16
+    name_jp: 小田原
+    name_en: Odawara
+    melody:
+      - お猿のかごやver.A.mp3
+  - id: 30117
+    number: 17
+    name_jp: 早川
+    name_en: Hayakawa
+    skip_train:
+      - 3023M
+    melody:
+      - JRE-IKST-021-02.mp3
+      - Gota del vient.mp3
+  - id: 30118
+    number: 18
+    name_jp: 根府川
+    name_en: Nebukawa
+    skip_train:
+      - 3023M
+    melody:
+      - JRE-IKST-021-02.mp3
+      - Gota del vient.mp3
+  - id: 30119
+    number: 19
+    name_jp: 真鶴
+    name_en: Manazuru
+    skip_train:
+      - 3023M
+    melody:
+      - JRE-IKST-021-02.mp3
+      - Water Crown.mp3
+  - id: 30120
+    number: 20
+    name_jp: 湯河原
+    name_en: Yugawara
+    melody:
+      - JRE-IKST-021-02.mp3
+      - Water Crown.mp3
+  - id: 30121
+    number: 21
+    name_jp: 熱海
+    name_en: Atami
+    melody:
+      - JRE-IKST-021-02.mp3

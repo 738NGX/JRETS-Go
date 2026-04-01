@@ -227,7 +227,17 @@ public partial class MainWindow
                 var maxLng = Math.Max(runningFrom.Coordinates[0], runningTo.Coordinates[0]);
                 var minLat = Math.Min(runningFrom.Coordinates[1], runningTo.Coordinates[1]);
                 var maxLat = Math.Max(runningFrom.Coordinates[1], runningTo.Coordinates[1]);
-                const double focusMarginDegrees = 0.018;
+                
+                // 动态计算边距，而不是使用固定的 0.018
+                // 确保长站间距（如品川-川崎、川崎-横滨）能够完整显示
+                double lngSpan = maxLng - minLng;
+                double latSpan = maxLat - minLat;
+                double maxSpan = Math.Max(lngSpan, latSpan);
+                // 公式：基础边距 0.025° + 距离的 50% 比例调整
+                // - 很短的站间（<0.05°）：约0.025°（~2.8km）
+                // - 中等站间（0.05-0.167°）：按比例增加
+                // - 很长的站间（>0.167°）：上限 0.08°（~8.9km）
+                double focusMarginDegrees = Math.Min(0.08, Math.Max(0.025, maxSpan * 0.5));
 
                 var focusCoords = fullLineCoords
                     .Where(c =>

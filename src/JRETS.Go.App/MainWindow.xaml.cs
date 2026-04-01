@@ -195,6 +195,8 @@ public partial class MainWindow : Window
     private RealtimeSnapshot? _latestLiveMemorySnapshot;
     private DateTime _latestLiveMemorySnapshotAtUtc;
     private string? _liveMemorySamplingLastError;
+    private int? _liveStationAnchorId;
+    private bool? _lastLiveDoorOpen;
 
     public MainWindow()
     {
