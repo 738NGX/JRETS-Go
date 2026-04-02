@@ -148,7 +148,6 @@ public partial class MainWindow : Window
     private double? _activeApproachTargetStopDistance;
     private int? _activeApproachScheduledSeconds;
     private bool _activeApproachOvershootFaultTriggered;
-    private int? _activeApproachStationId;
     private DateTime _sessionStartedAt;
     private readonly List<StationStopScore> _stationScores = [];
     private int? _lastScoredStationId;
@@ -189,6 +188,7 @@ public partial class MainWindow : Window
     private DateTime? _lastApproachSmoothingSampleAt;
     private RealtimeSnapshot? _latestApproachSnapshot;
     private TrainDisplayState? _latestApproachState;
+    private int? _latchedStationId;
     private readonly object _liveSnapshotSync = new();
     private CancellationTokenSource? _liveMemorySamplingCancellation;
     private Task? _liveMemorySamplingTask;

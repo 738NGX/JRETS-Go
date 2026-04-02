@@ -48,7 +48,7 @@ public partial class MainWindow
                 {
                     AnimateMiniMapPanel(show: true);
                     var snapshot = GetCurrentSnapshot();
-                    var state = _displayStateResolver.Resolve(_lineConfiguration, snapshot);
+                    var state = _displayStateResolver.Resolve(_lineConfiguration, snapshot, IsStopForSelectedService, _latchedStationId);
                     _latestApproachSnapshot = snapshot;
                     _latestApproachState = state;
                     await RenderMapAsync(snapshot, state, force: true);
@@ -189,6 +189,9 @@ public partial class MainWindow
                 .ToArray();
 
             var mapStationsById = _currentMapStations.ToDictionary(x => x.Id, x => x);
+            var stationContext = snapshot is not null && state is not null
+                ? BuildStationContext(snapshot, state)
+                : null;
             if (snapshot is not null && state is not null && !snapshot.DoorOpen)
             {
                 EnsureRunningSegmentMapping(snapshot, state);
@@ -207,8 +210,14 @@ public partial class MainWindow
                 }
                 else if (!snapshot.DoorOpen && state.NextStation is not null)
                 {
-                    if (mapStationsById.TryGetValue(snapshot.NextStationId, out var fromStation)
-                        && mapStationsById.TryGetValue(state.NextStation.Id, out var toStation)
+                    var targetStationId = stationContext?.MapToStationId ?? state.NextStation.Id;
+                    var fromStationId = stationContext?.MapFromStationId
+                        ?? _activeRunningSegmentMapping?.FromStationId
+                        ?? _lastKnownStopStationId
+                        ?? snapshot.NextStationId;
+
+                    if (mapStationsById.TryGetValue(fromStationId, out var fromStation)
+                        && mapStationsById.TryGetValue(targetStationId, out var toStation)
                         && fromStation.Id != toStation.Id)
                     {
                         runningFocus = true;
@@ -223,43 +232,12 @@ public partial class MainWindow
 
             if (runningFocus && runningFrom is not null && runningTo is not null)
             {
-                var minLng = Math.Min(runningFrom.Coordinates[0], runningTo.Coordinates[0]);
-                var maxLng = Math.Max(runningFrom.Coordinates[0], runningTo.Coordinates[0]);
-                var minLat = Math.Min(runningFrom.Coordinates[1], runningTo.Coordinates[1]);
-                var maxLat = Math.Max(runningFrom.Coordinates[1], runningTo.Coordinates[1]);
-                
-                // 动态计算边距，而不是使用固定的 0.018
-                // 确保长站间距（如品川-川崎、川崎-横滨）能够完整显示
-                double lngSpan = maxLng - minLng;
-                double latSpan = maxLat - minLat;
-                double maxSpan = Math.Max(lngSpan, latSpan);
-                // 公式：基础边距 0.025° + 距离的 50% 比例调整
-                // - 很短的站间（<0.05°）：约0.025°（~2.8km）
-                // - 中等站间（0.05-0.167°）：按比例增加
-                // - 很长的站间（>0.167°）：上限 0.08°（~8.9km）
-                double focusMarginDegrees = Math.Min(0.08, Math.Max(0.025, maxSpan * 0.5));
-
-                var focusCoords = fullLineCoords
-                    .Where(c =>
-                        c[0] >= minLng - focusMarginDegrees && c[0] <= maxLng + focusMarginDegrees
-                        && c[1] >= minLat - focusMarginDegrees && c[1] <= maxLat + focusMarginDegrees)
-                    .ToArray();
-
-                if (focusCoords.Length < 2)
-                {
-                    focusCoords =
-                    [
-                        runningFrom.Coordinates,
-                        runningTo.Coordinates
-                    ];
-                }
+                var focusCoords = BuildRouteSegmentCoords(routeCoords, runningFrom, runningTo);
 
                 var width = MiniMapCanvas.ActualWidth > 1 ? MiniMapCanvas.ActualWidth : 400;
                 var height = MiniMapCanvas.ActualHeight > 1 ? MiniMapCanvas.ActualHeight : 300;
-                const double padding = 18;
-                var centerLng = (runningFrom.Coordinates[0] + runningTo.Coordinates[0]) / 2.0;
-                var centerLat = (runningFrom.Coordinates[1] + runningTo.Coordinates[1]) / 2.0;
-                viewport = BuildFocusedMiniMapViewport(focusCoords, width, height, padding, centerLng, centerLat, 0.5);
+                const double padding = 24;
+                viewport = BuildMiniMapViewport(focusCoords, width, height, padding);
                 displayRouteCoords = fullLineCoords.Length >= 2 ? fullLineCoords : stationCoords;
             }
             else
@@ -542,7 +520,7 @@ public partial class MainWindow
         await Task.CompletedTask;
     }
 
-    private void RequestMapRender(RealtimeSnapshot snapshot, TrainDisplayState state)
+    private void RequestMapRender(RealtimeSnapshot snapshot, TrainDisplayState state, StationContext stationContext)
     {
         if (_currentMapStations is null || _currentMapRoute is null)
         {
@@ -551,9 +529,13 @@ public partial class MainWindow
 
         EnsureRunningSegmentMapping(snapshot, state);
 
-        var currentId = snapshot.NextStationId;
-        var nextId = state.NextStation?.Id ?? -1;
-        var stopId = state.CurrentStopStation?.Id ?? -1;
+        var currentId = snapshot.DoorOpen
+            ? stationContext.TimelineAnchorStationId
+            : stationContext.MapFromStationId;
+        var nextId = snapshot.DoorOpen
+            ? stationContext.TimelineAnchorStationId
+            : stationContext.MapToStationId;
+        var stopId = stationContext.CurrentStopStation?.Id ?? -1;
         var mappedTrainDistanceMeters = TryMapGameDistanceToConfigDistance(snapshot.CurrentDistanceMeters, out var mappedDistance)
             ? mappedDistance
             : (double?)null;
@@ -593,7 +575,7 @@ public partial class MainWindow
         }
 
         var departureStationId = state.CurrentStopStation?.Id ?? _lastKnownStopStationId;
-        var nextStopStationId = _activeApproachStationId ?? state.NextStation?.Id;
+        var nextStopStationId = state.NextStation?.Id;
         TryBuildRunningSegmentMapping(snapshot, departureStationId, nextStopStationId);
     }
 
@@ -792,6 +774,48 @@ public partial class MainWindow
 
         coordinate = [tail[0], tail[1]];
         return true;
+    }
+
+    private static double[][] BuildRouteSegmentCoords(IReadOnlyList<RoutePointEntry> routeCoords, StationMapData fromStation, StationMapData toStation)
+    {
+        var minKm = Math.Min(fromStation.Displacement, toStation.Displacement);
+        var maxKm = Math.Max(fromStation.Displacement, toStation.Displacement);
+
+        var segment = routeCoords
+            .Where(x => x.DistanceKm >= minKm && x.DistanceKm <= maxKm && x.Coordinates.Length >= 2)
+            .Select(x => x.Coordinates)
+            .ToList();
+
+        if (TryInterpolateRouteCoordinate(routeCoords, minKm, out var startCoord))
+        {
+            segment.Add(startCoord);
+        }
+
+        if (TryInterpolateRouteCoordinate(routeCoords, maxKm, out var endCoord))
+        {
+            segment.Add(endCoord);
+        }
+
+        if (fromStation.Coordinates.Length >= 2)
+        {
+            segment.Add(fromStation.Coordinates);
+        }
+
+        if (toStation.Coordinates.Length >= 2)
+        {
+            segment.Add(toStation.Coordinates);
+        }
+
+        if (segment.Count < 2)
+        {
+            return
+            [
+                fromStation.Coordinates,
+                toStation.Coordinates
+            ];
+        }
+
+        return segment.ToArray();
     }
 
     private void SetMapStatus(string status)

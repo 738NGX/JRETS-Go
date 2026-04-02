@@ -13,7 +13,7 @@ public partial class MainWindow
     private void ExportSessionReport()
     {
         var currentSnapshot = GetCurrentSnapshot();
-        var currentState = _displayStateResolver.Resolve(_lineConfiguration, currentSnapshot);
+        var currentState = _displayStateResolver.Resolve(_lineConfiguration, currentSnapshot, IsStopForSelectedService, _latchedStationId);
         var reportTrainNumber = ResolveReportTrainNumber(currentSnapshot);
 
         var defaultDirection = string.Equals(_lineConfiguration.LineInfo.Id, "yamanote", StringComparison.OrdinalIgnoreCase)
@@ -208,7 +208,8 @@ public partial class MainWindow
         RealtimeSnapshot snapshot;
         try
         {
-            snapshot = _memoryDataSource.GetSnapshot();
+            // Auto selection only needs line_path; avoid station-id memory reads.
+            snapshot = _memoryDataSource.GetSnapshotWithoutStationId(ResolveFallbackAnchorStationId());
         }
         catch (Exception ex)
         {

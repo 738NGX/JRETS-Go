@@ -126,7 +126,52 @@ public partial class MainWindow
         return _trainRouteService.GetDirectionText(_lineConfiguration, _selectedService?.Train, state);
     }
 
-    private void RefreshUpcomingStations(RealtimeSnapshot snapshot, TrainDisplayState state)
+    private StationContext BuildStationContext(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        var currentStop = state.CurrentStopStation;
+        var nextStop = state.NextStation;
+        var timelineAnchorStationId = currentStop?.Id ?? snapshot.NextStationId;
+
+        var mapFromStationId = snapshot.DoorOpen
+            ? (currentStop?.Id ?? _lastKnownStopStationId ?? timelineAnchorStationId)
+            : (_activeRunningSegmentMapping?.FromStationId ?? _lastKnownStopStationId ?? snapshot.NextStationId);
+        var mapToStationId = snapshot.DoorOpen
+            ? (nextStop?.Id ?? mapFromStationId)
+            : (_activeRunningSegmentMapping?.ToStationId ?? nextStop?.Id ?? mapFromStationId);
+
+        StationInfo? hudDisplayStation;
+        string hudStatusText;
+        if (snapshot.DoorOpen)
+        {
+            hudDisplayStation = currentStop;
+            hudStatusText = "ただいま";
+        }
+        else
+        {
+            hudDisplayStation = nextStop;
+            var remainingDistance = snapshot.TargetStopDistanceMeters - snapshot.CurrentDistanceMeters;
+            hudStatusText = remainingDistance < 400 ? "まもなく" : "次は";
+        }
+
+        return new StationContext
+        {
+            CurrentStopStation = currentStop,
+            NextStopStation = nextStop,
+            TimelineAnchorStationId = timelineAnchorStationId,
+            MapFromStationId = mapFromStationId,
+            MapToStationId = mapToStationId,
+            HudDisplayStation = hudDisplayStation,
+            HudStatusText = hudStatusText,
+            Approach = new ApproachContext
+            {
+                TargetStopDistanceMeters = _activeApproachTargetStopDistance,
+                ScheduledSeconds = _activeApproachScheduledSeconds,
+                OvershootFaultTriggered = _activeApproachOvershootFaultTriggered
+            }
+        };
+    }
+
+    private void RefreshUpcomingStations(RealtimeSnapshot snapshot, TrainDisplayState state, StationContext stationContext)
     {
         _upcomingStations.Clear();
 
@@ -137,11 +182,24 @@ public partial class MainWindow
             return;
         }
 
+        var timelineSnapshot = new RealtimeSnapshot
+        {
+            CapturedAt = snapshot.CapturedAt,
+            NextStationId = stationContext.TimelineAnchorStationId,
+            DoorOpen = snapshot.DoorOpen,
+            MainClockSeconds = snapshot.MainClockSeconds,
+            TimetableHour = snapshot.TimetableHour,
+            TimetableMinute = snapshot.TimetableMinute,
+            TimetableSecond = snapshot.TimetableSecond,
+            CurrentDistanceMeters = snapshot.CurrentDistanceMeters,
+            TargetStopDistanceMeters = snapshot.TargetStopDistanceMeters,
+            LinePath = snapshot.LinePath
+        };
 
         var timelineState = _timelineService.ComputeState(
-            snapshot,
+            _lineConfiguration,
+            timelineSnapshot,
             stopStations,
-            _lineConfiguration.LineInfo.IsLoop,
             TimelineVisibleTokenCount,
             _timelineInitialized,
             _timelineActiveToken,
@@ -199,6 +257,45 @@ public partial class MainWindow
                 StationMarkerVisibility = isStation ? Visibility.Visible : Visibility.Collapsed
             });
         }
+    }
+
+    private void UpdateLatchedStationId(RealtimeSnapshot snapshot, TrainDisplayState state)
+    {
+        if (snapshot.DoorOpen)
+        {
+            _latchedStationId = state.CurrentStopStation?.Id ?? _latchedStationId;
+            return;
+        }
+
+        _latchedStationId = state.NextStation?.Id ?? _latchedStationId;
+    }
+
+    private sealed class StationContext
+    {
+        public required StationInfo? CurrentStopStation { get; init; }
+
+        public required StationInfo? NextStopStation { get; init; }
+
+        public required int TimelineAnchorStationId { get; init; }
+
+        public required int MapFromStationId { get; init; }
+
+        public required int MapToStationId { get; init; }
+
+        public required StationInfo? HudDisplayStation { get; init; }
+
+        public required string HudStatusText { get; init; }
+
+        public required ApproachContext Approach { get; init; }
+    }
+
+    private sealed class ApproachContext
+    {
+        public required double? TargetStopDistanceMeters { get; init; }
+
+        public required int? ScheduledSeconds { get; init; }
+
+        public required bool OvershootFaultTriggered { get; init; }
     }
 
 }

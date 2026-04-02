@@ -18,21 +18,21 @@ public sealed class TimelineService
     }
 
     public TimelineState ComputeState(
+        LineConfiguration lineConfiguration,
         RealtimeSnapshot snapshot,
         IReadOnlyList<StationInfo> stopStations,
-        bool isLoopLine,
         int visibleTokenCount,
         bool initialized,
         int timelineActiveToken,
         int timelineWindowStart)
     {
         var totalTokens = Math.Max(1, stopStations.Count * 2 - 1);
-        var currentPos = ResolveTimelineStationPosition(snapshot, stopStations);
+        var currentPos = ResolveTimelineStationPosition(lineConfiguration, stopStations, snapshot.NextStationId);
         var expectedActiveToken = snapshot.DoorOpen
             ? currentPos * 2
             : Math.Min(totalTokens - 1, currentPos * 2 + 1);
 
-        if (isLoopLine && initialized && stopStations.Count > 0)
+        if (lineConfiguration.LineInfo.IsLoop && initialized && stopStations.Count > 0)
         {
             var lastStationToken = (stopStations.Count - 1) * 2;
 
@@ -73,7 +73,7 @@ public sealed class TimelineService
             ? 0
             : ((Math.Max(0, expectedActiveToken - 1) / 2) * 2);
 
-        if (isLoopLine)
+        if (lineConfiguration.LineInfo.IsLoop)
         {
             alignedWindowStart = Math.Max(0, alignedWindowStart);
         }
@@ -93,31 +93,60 @@ public sealed class TimelineService
         };
     }
 
-    private static int ResolveTimelineStationPosition(RealtimeSnapshot snapshot, IReadOnlyList<StationInfo> stopStations)
+    private static int ResolveTimelineStationPosition(
+        LineConfiguration lineConfiguration,
+        IReadOnlyList<StationInfo> stopStations,
+        int anchorStationId)
     {
         if (stopStations.Count == 0)
         {
             return 0;
         }
 
-        // Try to find exact match for nextStationId (the station we're approaching)
-        for (var i = 0; i < stopStations.Count; i++)
+        var stopIndexById = stopStations
+            .Select((station, index) => new { station.Id, index })
+            .ToDictionary(x => x.Id, x => x.index);
+
+        if (stopIndexById.TryGetValue(anchorStationId, out var exactIndex))
         {
-            if (stopStations[i].Id == snapshot.NextStationId)
+            return exactIndex;
+        }
+
+        var allStations = lineConfiguration.Stations;
+        var physicalIndex = -1;
+        for (var i = 0; i < allStations.Count; i++)
+        {
+            if (allStations[i].Id == anchorStationId)
             {
-                return i;
+                physicalIndex = i;
+                break;
+            }
+        }
+        if (physicalIndex < 0)
+        {
+            return 0;
+        }
+
+        for (var i = physicalIndex; i >= 0; i--)
+        {
+            if (stopIndexById.TryGetValue(allStations[i].Id, out var stopIndex))
+            {
+                return stopIndex;
             }
         }
 
-        // Fallback: find previous station by ID
-        var previousIndex = stopStations
-            .Select((station, index) => new { station.Id, index })
-            .Where(x => x.Id < snapshot.NextStationId)
-            .Select(x => x.index)
-            .DefaultIfEmpty(0)
-            .Max();
+        if (lineConfiguration.LineInfo.IsLoop)
+        {
+            for (var i = allStations.Count - 1; i > physicalIndex; i--)
+            {
+                if (stopIndexById.TryGetValue(allStations[i].Id, out var stopIndex))
+                {
+                    return stopIndex;
+                }
+            }
+        }
 
-        return Math.Clamp(previousIndex, 0, stopStations.Count - 1);
+        return 0;
     }
 }
 

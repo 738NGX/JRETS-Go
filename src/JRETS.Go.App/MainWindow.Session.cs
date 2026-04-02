@@ -62,6 +62,7 @@ public partial class MainWindow
         _activeApproachScheduledSeconds = null;
         _activeApproachOvershootFaultTriggered = false;
         _activeRunningSegmentMapping = null;
+        _latchedStationId = null;
         _mapLastTrainMarkerDistanceMeters = null;
         _latestApproachSnapshot = null;
         _latestApproachState = null;
@@ -87,7 +88,7 @@ public partial class MainWindow
         }
 
         var currentSnapshot = GetCurrentSnapshot();
-        var currentState = _displayStateResolver.Resolve(_lineConfiguration, currentSnapshot);
+        var currentState = _displayStateResolver.Resolve(_lineConfiguration, currentSnapshot, IsStopForSelectedService, _latchedStationId);
         _originStationName = currentState.CurrentStopStation?.NameJp;
         _lastKnownStopStationId = currentState.CurrentStopStation?.Id;
         _lastKnownStopStationName = currentState.CurrentStopStation?.NameJp;
@@ -135,6 +136,7 @@ public partial class MainWindow
         _activeApproachScheduledSeconds = null;
         _activeApproachOvershootFaultTriggered = false;
         _activeRunningSegmentMapping = null;
+        _latchedStationId = null;
         _mapLastTrainMarkerDistanceMeters = null;
         _latestApproachSnapshot = null;
         _latestApproachState = null;

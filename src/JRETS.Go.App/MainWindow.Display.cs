@@ -62,10 +62,12 @@ public partial class MainWindow
             return;
         }
 
-        var state = _displayStateResolver.Resolve(_lineConfiguration, snapshot);
+        var state = _displayStateResolver.Resolve(_lineConfiguration, snapshot, IsStopForSelectedService, _latchedStationId);
         _latestApproachSnapshot = snapshot;
         _latestApproachState = state;
         CaptureStopScore(snapshot, state);
+        UpdateLatchedStationId(snapshot, state);
+        var stationContext = BuildStationContext(snapshot, state);
 
         ApplyLineColor();
         var serviceTypeText = GetServiceTypeDisplayName();
@@ -74,42 +76,9 @@ public partial class MainWindow
         ServiceTypeTagBorder.Background = hasServiceTypeText ? LineColorPreview.Background : Brushes.Transparent;
         DirectionTextBlock.Text = GetDirectionText(state);
 
-        // Determine display station and status text based on door and distance
-        StationInfo? displayStation = null;
-        string statusText = "次は";
-        var nextStoppingStation = ResolveAnnouncementTargetStationId(state) is int nextStoppingStationId
-            ? _lineConfiguration.Stations.FirstOrDefault(x => x.Id == nextStoppingStationId)
-            : null;
-
-        if (snapshot.DoorOpen && state.CurrentStopStation is not null)
-        {
-            // ただいま (currently stopped at this station)
-            displayStation = state.CurrentStopStation;
-            statusText = "ただいま";
-        }
-        else if (!snapshot.DoorOpen && nextStoppingStation is not null)
-        {
-            // Check remaining distance to next stopping station
-            var remainingDistance = snapshot.TargetStopDistanceMeters - snapshot.CurrentDistanceMeters;
-            if (remainingDistance < 400)
-            {
-                // まもなく (approaching next stop - less than 400m away)
-                displayStation = nextStoppingStation;
-                statusText = "まもなく";
-            }
-            else
-            {
-                // 次は (normal state - more than 400m away)
-                displayStation = nextStoppingStation;
-                statusText = "次は";
-            }
-        }
-        else
-        {
-            // Fallback to physical next station when stopping-station resolution is unavailable.
-            displayStation = state.NextStation;
-            statusText = "次は";
-        }
+        // Determine display station and status text from shared StationContext.
+        var displayStation = stationContext.HudDisplayStation;
+        var statusText = stationContext.HudStatusText;
 
         NextStationStatusTextBlock.Text = statusText;
 
@@ -127,17 +96,17 @@ public partial class MainWindow
         LineCode.Text = showStationCodeBadge ? lineCodeText : string.Empty;
         LineNumberBadgeTextBlock.Text = showStationCodeBadge ? lineNumberText : string.Empty;
 
-        RefreshUpcomingStations(snapshot, state);
+        RefreshUpcomingStations(snapshot, state, stationContext);
         HandleAutoAnnouncements(snapshot, state);
         ApplyScoreSummaryText();
-        EnsureApproachRealtimeUpdateTimerActive(snapshot, state);
+        EnsureApproachRealtimeUpdateTimerActive(snapshot, state, stationContext);
 
         ErrorTextBlock.Text = string.IsNullOrWhiteSpace(_lastDataSourceError)
             ? string.Empty
             : $"Info: {_lastDataSourceError}";
 
         UpdateMemoryDebugText(snapshot);
-        RequestMapRender(snapshot, state);
+        RequestMapRender(snapshot, state, stationContext);
     }
 
     private void ApplyMandatoryUpdateGateUi()
@@ -259,10 +228,9 @@ public partial class MainWindow
             var departureStationId = state.CurrentStopStation?.Id ?? _lastKnownStopStationId;
             _activeApproachTargetStopDistance = snapshot.TargetStopDistanceMeters;
             _activeApproachScheduledSeconds = snapshot.TimetableHour * 3600 + snapshot.TimetableMinute * 60 + snapshot.TimetableSecond;
-            _activeApproachStationId = ResolveNextStoppingStationFromCurrentId(departureStationId);
             _activeApproachOvershootFaultTriggered = false;
             ResetApproachDisplaySmoothing();
-            TryBuildRunningSegmentMapping(snapshot, departureStationId, _activeApproachStationId);
+            TryBuildRunningSegmentMapping(snapshot, departureStationId, state.NextStation?.Id);
 
         }
 
@@ -279,19 +247,15 @@ public partial class MainWindow
 
         // Scoring station must come from latched departure-time reference data.
         // This avoids scoring against transient/incorrect live station IDs at door-open transitions.
-        var normalizedApproachStationId = _activeApproachStationId.HasValue
-            ? NormalizeStationIdForScoring(_activeApproachStationId.Value)
-            : (int?)null;
-        StationInfo? scoringStation = normalizedApproachStationId.HasValue
-            ? _lineConfiguration.Stations.FirstOrDefault(x => x.Id == normalizedApproachStationId.Value)
-            : null;
+        var scoringStation = state.CurrentStopStation;
 
         if (!doorOpenTransition || scoringStation is null)
         {
             return;
         }
 
-        if (_activeApproachTargetStopDistance is null || _activeApproachScheduledSeconds is null)
+        var stationContext = BuildStationContext(snapshot, state);
+        if (stationContext.Approach.TargetStopDistanceMeters is null || stationContext.Approach.ScheduledSeconds is null)
         {
             return;
         }
@@ -301,7 +265,7 @@ public partial class MainWindow
             return;
         }
 
-        var scoringSnapshot = BuildScoringSnapshot(snapshot);
+        var scoringSnapshot = BuildScoringSnapshot(snapshot, stationContext);
         var stopScore = _stopScoringService.ScoreStop(scoringStation, scoringSnapshot);
         var totalBeforeStop = _runningTotalScore;
         _runningMaxScore += 100;
@@ -345,13 +309,13 @@ public partial class MainWindow
             snapshot.MainClockSeconds);
     }
 
-    private RealtimeSnapshot BuildScoringSnapshot(RealtimeSnapshot currentSnapshot)
+    private RealtimeSnapshot BuildScoringSnapshot(RealtimeSnapshot currentSnapshot, StationContext stationContext)
     {
         return _stationScoreService.BuildScoringSnapshot(
             currentSnapshot,
-            _activeApproachTargetStopDistance,
-            _activeApproachScheduledSeconds,
-            _activeApproachOvershootFaultTriggered,
+            stationContext.Approach.TargetStopDistanceMeters,
+            stationContext.Approach.ScheduledSeconds,
+            stationContext.Approach.OvershootFaultTriggered,
             OvershootFaultMeters);
     }
 
@@ -365,7 +329,7 @@ public partial class MainWindow
         TotalScoreTextBlock.Text = $"pt/{_runningMaxScore}pt";
     }
 
-    private void UpdateApproachScorePanel(RealtimeSnapshot snapshot, TrainDisplayState state)
+    private void UpdateApproachScorePanel(RealtimeSnapshot snapshot, TrainDisplayState state, StationContext stationContext)
     {
         if (!_sessionRunning)
         {
@@ -385,27 +349,21 @@ public partial class MainWindow
             return;
         }
 
-        if (_activeApproachStationId is null)
+        if (stationContext.Approach.ScheduledSeconds is null || stationContext.Approach.TargetStopDistanceMeters is null)
         {
             ResetApproachDisplaySmoothing();
             return;
         }
 
-        if (_activeApproachScheduledSeconds is null || _activeApproachTargetStopDistance is null)
-        {
-            ResetApproachDisplaySmoothing();
-            return;
-        }
-
-        var remainingMeters = _activeApproachTargetStopDistance.Value - snapshot.CurrentDistanceMeters;
+        var remainingMeters = stationContext.Approach.TargetStopDistanceMeters.Value - snapshot.CurrentDistanceMeters;
         if (!_isApproachPanelPinned && remainingMeters >= ApproachPanelTriggerMeters)
         {
             return;
         }
 
-        var scheduledSeconds = _activeApproachScheduledSeconds.Value;
+        var scheduledSeconds = stationContext.Approach.ScheduledSeconds.Value;
         var timeErrorSigned = snapshot.MainClockSeconds - scheduledSeconds;
-        var distanceErrorSignedMeters = snapshot.CurrentDistanceMeters - _activeApproachTargetStopDistance.Value;
+        var distanceErrorSignedMeters = snapshot.CurrentDistanceMeters - stationContext.Approach.TargetStopDistanceMeters.Value;
 
         var sampleDtSeconds = StopCheckRealtimeRefreshIntervalMs / 1000d;
         var sampleNow = DateTime.UtcNow;
@@ -633,15 +591,14 @@ public partial class MainWindow
         _approachRealtimeUpdateTimer = null;
     }
 
-    private void EnsureApproachRealtimeUpdateTimerActive(RealtimeSnapshot snapshot, TrainDisplayState state)
+    private void EnsureApproachRealtimeUpdateTimerActive(RealtimeSnapshot snapshot, TrainDisplayState state, StationContext stationContext)
     {
         // Use latched data to determine if should keep running the stop-check updater.
         var shouldBeRunning = _sessionRunning
             && !_isApproachSettlementAnimating
             && !snapshot.DoorOpen
-            && _activeApproachStationId is not null
-            && _activeApproachScheduledSeconds is not null
-            && _activeApproachTargetStopDistance is not null
+            && stationContext.Approach.ScheduledSeconds is not null
+            && stationContext.Approach.TargetStopDistanceMeters is not null
             && !_isScoreCountupAnimating;
 
         if (shouldBeRunning && _approachRealtimeUpdateTimer is null)
@@ -655,7 +612,7 @@ public partial class MainWindow
                 if (_sessionRunning && _usingLiveMemory && TryGetLatestLiveMemorySnapshot(out var liveSnapshot))
                 {
                     _latestApproachSnapshot = liveSnapshot;
-                    _latestApproachState = _displayStateResolver.Resolve(_lineConfiguration, liveSnapshot);
+                    _latestApproachState = _displayStateResolver.Resolve(_lineConfiguration, liveSnapshot, IsStopForSelectedService, _latchedStationId);
                 }
 
                 if (_latestApproachSnapshot is null || _latestApproachState is null)
@@ -663,7 +620,8 @@ public partial class MainWindow
                     return;
                 }
 
-                UpdateApproachScorePanel(_latestApproachSnapshot, _latestApproachState);
+                var liveStationContext = BuildStationContext(_latestApproachSnapshot, _latestApproachState);
+                UpdateApproachScorePanel(_latestApproachSnapshot, _latestApproachState, liveStationContext);
             };
             _approachRealtimeUpdateTimer.Start();
         }

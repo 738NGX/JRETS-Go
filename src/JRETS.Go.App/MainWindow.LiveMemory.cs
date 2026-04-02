@@ -305,6 +305,8 @@ public partial class MainWindow
         {
             if (!_liveStationAnchorId.HasValue)
             {
+                // Initialization needs one real station-id snapshot to establish a correct anchor.
+                // After initialization, runtime station-id refresh is only at door-close transition.
                 var initial = _memoryDataSource.GetSnapshot();
                 var initialAnchor = IsConfiguredStationId(initial.NextStationId)
                     ? initial.NextStationId
