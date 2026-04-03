@@ -213,7 +213,9 @@ public partial class MainWindow
 
         var futureBrush = GetFutureBrush();
         var finishedBrush = new SolidColorBrush(Color.FromRgb(120, 120, 120));
-        var activeBrush = new SolidColorBrush(Color.FromRgb(190, 24, 24));
+        var activeBrush = IsActiveTokenBlinkRed(snapshot.CapturedAt)
+            ? new SolidColorBrush(Color.FromRgb(190, 24, 24))
+            : finishedBrush;
 
         var isLoopLine = _lineConfiguration.LineInfo.IsLoop;
 
@@ -257,6 +259,13 @@ public partial class MainWindow
                 StationMarkerVisibility = isStation ? Visibility.Visible : Visibility.Collapsed
             });
         }
+    }
+
+    private static bool IsActiveTokenBlinkRed(DateTime capturedAt)
+    {
+        const long halfPeriodMilliseconds = 1000;
+        var ticksMs = capturedAt.ToUniversalTime().Ticks / TimeSpan.TicksPerMillisecond;
+        return (ticksMs / halfPeriodMilliseconds) % 2 == 0;
     }
 
     private void UpdateLatchedStationId(RealtimeSnapshot snapshot, TrainDisplayState state)
