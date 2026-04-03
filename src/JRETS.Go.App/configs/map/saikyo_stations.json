@@ -1,0 +1,259 @@
+{
+  "32094": {
+    "name": "新木場",
+    "displacement": 0.0,
+    "coordinates": [
+      139.8272975,
+      35.6461142
+    ],
+    "labeled": true
+  },
+  "32095": {
+    "name": "東雲",
+    "displacement": 2.2396,
+    "coordinates": [
+      139.8036324,
+      35.6407163
+    ]
+  },
+  "32096": {
+    "name": "国際展示場",
+    "displacement": 3.5216,
+    "coordinates": [
+      139.7917707,
+      35.6344187
+    ]
+  },
+  "32097": {
+    "name": "東京テレポート",
+    "displacement": 5.0028,
+    "coordinates": [
+      139.7781004,
+      35.6270704
+    ],
+    "labeled": true
+  },
+  "32098": {
+    "name": "天王洲アイル",
+    "displacement": 7.7774,
+    "coordinates": [
+      139.7509101,
+      35.6205791
+    ]
+  },
+  "32099": {
+    "name": "品川シーサイド",
+    "displacement": 8.9888,
+    "coordinates": [
+      139.7499067,
+      35.6097164
+    ]
+  },
+  "32100": {
+    "name": "大井町",
+    "displacement": 10.5888,
+    "coordinates": [
+      139.7344023,
+      35.6074205
+    ]
+  },
+  "32101": {
+    "name": "大崎",
+    "displacement": 12.2757,
+    "coordinates": [
+      139.7281603,
+      35.6192342
+    ],
+    "labeled": true
+  },
+  "32102": {
+    "name": "恵比寿",
+    "displacement": 15.8217,
+    "coordinates": [
+      139.7102242,
+      35.6464471
+    ]
+  },
+  "32103": {
+    "name": "渋谷",
+    "displacement": 17.3327,
+    "coordinates": [
+      139.7017785,
+      35.6580851
+    ]
+  },
+  "32104": {
+    "name": "新宿",
+    "displacement": 20.8411,
+    "coordinates": [
+      139.7012283,
+      35.6891605
+    ],
+    "labeled": true
+  },
+  "32105": {
+    "name": "池袋",
+    "displacement": 25.5753,
+    "coordinates": [
+      139.7111715,
+      35.7301778
+    ],
+    "labeled": true
+  },
+  "32106": {
+    "name": "板橋",
+    "displacement": 27.4155,
+    "coordinates": [
+      139.7193707,
+      35.7452969
+    ]
+  },
+  "32107": {
+    "name": "十条",
+    "displacement": 29.1058,
+    "coordinates": [
+      139.7222807,
+      35.7600092
+    ]
+  },
+  "32108": {
+    "name": "赤羽",
+    "displacement": 31.1318,
+    "coordinates": [
+      139.7203917,
+      35.7779532
+    ],
+    "labeled": true
+  },
+  "32109": {
+    "name": "北赤羽",
+    "displacement": 32.8607,
+    "coordinates": [
+      139.7059803,
+      35.7867333
+    ]
+  },
+  "32110": {
+    "name": "浮間舟渡",
+    "displacement": 34.3022,
+    "coordinates": [
+      139.6914851,
+      35.7911288
+    ]
+  },
+  "32111": {
+    "name": "戸田公園",
+    "displacement": 36.6152,
+    "coordinates": [
+      139.678135,
+      35.8078942
+    ]
+  },
+  "32112": {
+    "name": "戸田",
+    "displacement": 37.9661,
+    "coordinates": [
+      139.6695308,
+      35.8176758
+    ]
+  },
+  "32113": {
+    "name": "北戸田",
+    "displacement": 39.3941,
+    "coordinates": [
+      139.6600648,
+      35.8276156
+    ]
+  },
+  "32114": {
+    "name": "武蔵浦和",
+    "displacement": 41.7439,
+    "coordinates": [
+      139.6467188,
+      35.8454575
+    ],
+    "labeled": true
+  },
+  "32115": {
+    "name": "中浦和",
+    "displacement": 42.9593,
+    "coordinates": [
+      139.6376354,
+      35.8535235
+    ]
+  },
+  "32116": {
+    "name": "南与野",
+    "displacement": 44.6753,
+    "coordinates": [
+      139.631111,
+      35.8679013
+    ]
+  },
+  "32117": {
+    "name": "与野本町",
+    "displacement": 46.2231,
+    "coordinates": [
+      139.6259503,
+      35.8811896
+    ]
+  },
+  "32118": {
+    "name": "北与野",
+    "displacement": 47.3598,
+    "coordinates": [
+      139.6285476,
+      35.8907098
+    ]
+  },
+  "32201": {
+    "name": "大宮",
+    "displacement": 49.2219,
+    "coordinates": [
+      139.6231498,
+      35.9061203
+    ],
+    "labeled": true
+  },
+  "32202": {
+    "name": "日進",
+    "displacement": 52.9156,
+    "coordinates": [
+      139.6061583,
+      35.9315436
+    ]
+  },
+  "32211": {
+    "name": "西大宮",
+    "displacement": 55.4858,
+    "coordinates": [
+      139.5799701,
+      35.9223473
+    ]
+  },
+  "32203": {
+    "name": "指扇",
+    "displacement": 56.9523,
+    "coordinates": [
+      139.5650373,
+      35.9170855
+    ]
+  },
+  "32204": {
+    "name": "南古谷",
+    "displacement": 61.5698,
+    "coordinates": [
+      139.5197632,
+      35.9033544
+    ]
+  },
+  "32205": {
+    "name": "川越",
+    "displacement": 65.0448,
+    "coordinates": [
+      139.4830911,
+      35.9069134
+    ],
+    "labeled": true
+  }
+}

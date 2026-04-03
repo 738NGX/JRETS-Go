@@ -92,28 +92,88 @@ public partial class MainWindow
 
     private void ApplyLineColor()
     {
-        var color = _lineConfiguration.LineInfo.LineColor;
-        if (string.IsNullOrWhiteSpace(color))
-        {
-            LineColorPreview.Background = new SolidColorBrush(Color.FromRgb(0, 178, 229));
-            return;
-        }
+        LineColorPreview.Background = ResolveBrushForLineColor(_lineConfiguration.LineInfo.LineColor);
+    }
 
-        try
+    private void ApplyLineColor(bool doorOpen, StationInfo? displayStation, int? mapFromStationId, int? mapToStationId)
+    {
+        var color = doorOpen
+            ? ResolveEffectiveStationLineColor(displayStation)
+            : ResolveEffectiveSegmentLineColor(mapFromStationId, mapToStationId);
+        LineColorPreview.Background = ResolveBrushForLineColor(color);
+    }
+
+    private SolidColorBrush ResolveBrushForLineColor(string? colorText)
+    {
+        if (!string.IsNullOrWhiteSpace(colorText))
         {
-            var parsed = ColorConverter.ConvertFromString(color);
-            if (parsed is Color c)
+            try
             {
-                LineColorPreview.Background = new SolidColorBrush(c);
-                return;
+                var parsed = ColorConverter.ConvertFromString(colorText);
+                if (parsed is Color c)
+                {
+                    return new SolidColorBrush(c);
+                }
+            }
+            catch
+            {
+                // Fall back to the app default color.
             }
         }
-        catch
+
+        return new SolidColorBrush(Color.FromRgb(0, 178, 229));
+    }
+
+    private StationInfo? FindStationById(int stationId)
+    {
+        return _lineConfiguration.Stations.FirstOrDefault(x => x.Id == stationId);
+    }
+
+    private string ResolveEffectiveLineCode(StationInfo? station)
+    {
+        if (station is not null && station.LineCodeOverride is not null)
         {
-            // fall back to default line color
+            return station.LineCodeOverride.Trim();
         }
 
-        LineColorPreview.Background = new SolidColorBrush(Color.FromRgb(0, 178, 229));
+        return _lineConfiguration.LineInfo.Code;
+    }
+
+    private string ResolveEffectiveStationLineColor(StationInfo? station)
+    {
+        if (station is not null && station.LineColorOverride is not null)
+        {
+            var overrideColor = station.LineColorOverride.Trim();
+            if (!string.IsNullOrWhiteSpace(overrideColor))
+            {
+                return overrideColor;
+            }
+        }
+
+        return _lineConfiguration.LineInfo.LineColor;
+    }
+
+    private string ResolveEffectiveSegmentLineColor(int? fromStationId, int? toStationId)
+    {
+        if (fromStationId.HasValue)
+        {
+            var fromStation = FindStationById(fromStationId.Value);
+            if (fromStation is not null && !string.IsNullOrWhiteSpace(fromStation.LineColorOverride))
+            {
+                return fromStation.LineColorOverride.Trim();
+            }
+        }
+
+        if (toStationId.HasValue)
+        {
+            var toStation = FindStationById(toStationId.Value);
+            if (toStation is not null && !string.IsNullOrWhiteSpace(toStation.LineColorOverride))
+            {
+                return toStation.LineColorOverride.Trim();
+            }
+        }
+
+        return _lineConfiguration.LineInfo.LineColor;
     }
 
     private string GetServiceTypeDisplayName()
@@ -210,12 +270,11 @@ public partial class MainWindow
         _timelineLastDoorOpen = timelineState.LastDoorOpen;
         var totalTokens = timelineState.TotalTokens;
 
-
-        var futureBrush = GetFutureBrush();
         var finishedBrush = new SolidColorBrush(Color.FromRgb(120, 120, 120));
         var activeBrush = IsActiveTokenBlinkRed(snapshot.CapturedAt)
             ? new SolidColorBrush(Color.FromRgb(190, 24, 24))
             : finishedBrush;
+
 
         var isLoopLine = _lineConfiguration.LineInfo.IsLoop;
 
@@ -243,22 +302,60 @@ public partial class MainWindow
             
             var station = stopStations[resolvedStationIndex];
 
-            var fill = tokenIndex < _timelineActiveToken
-                ? finishedBrush
-                : tokenIndex == _timelineActiveToken
-                    ? activeBrush
-                    : futureBrush;
+            var fill = ResolveUpcomingArrowFill(stopStations, tokenIndex, stationIndex, isStation, isLoopLine, finishedBrush, activeBrush);
 
             _upcomingStations.Add(new UpcomingStationItem
             {
                 NameLabel = isStation ? station.NameJp : string.Empty,
-                CodeLabel = isStation ? $"{_lineConfiguration.LineInfo.Code}-{station.Number:D2}" : string.Empty,
+                CodeLabel = isStation
+                    ? string.IsNullOrWhiteSpace(ResolveEffectiveLineCode(station)) || station.Number <= 0
+                        ? string.Empty
+                        : $"{ResolveEffectiveLineCode(station)}-{station.Number:D2}"
+                    : string.Empty,
                 ArrowFill = fill,
                 ArrowGeometry = BuildArrowGeometry(isFirstVisibleStation, isStation),
                 ArrowWidth = isStation ? StationArrowWidth : SegmentArrowWidth,
                 StationMarkerVisibility = isStation ? Visibility.Visible : Visibility.Collapsed
             });
         }
+    }
+
+    private Brush ResolveUpcomingArrowFill(
+        IReadOnlyList<StationInfo> stopStations,
+        int tokenIndex,
+        int stationIndex,
+        bool isStation,
+        bool isLoopLine,
+        Brush finishedBrush,
+        Brush activeBrush)
+    {
+        if (stopStations.Count == 0)
+        {
+            return GetFutureBrush();
+        }
+
+        if (tokenIndex < _timelineActiveToken)
+        {
+            return finishedBrush;
+        }
+
+        if (tokenIndex == _timelineActiveToken)
+        {
+            return activeBrush;
+        }
+
+        var resolvedStationIndex = stationIndex;
+        if (isLoopLine)
+        {
+            resolvedStationIndex %= stopStations.Count;
+        }
+        else
+        {
+            resolvedStationIndex = Math.Clamp(resolvedStationIndex, 0, stopStations.Count - 1);
+        }
+
+        var station = stopStations[resolvedStationIndex];
+        return ResolveBrushForLineColor(ResolveEffectiveStationLineColor(station));
     }
 
     private static bool IsActiveTokenBlinkRed(DateTime capturedAt)

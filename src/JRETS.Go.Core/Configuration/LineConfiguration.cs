@@ -58,6 +58,10 @@ public sealed class StationInfo
 
     public required string NameEn { get; init; }
 
+    public string? LineCodeOverride { get; init; }
+
+    public string? LineColorOverride { get; init; }
+
     public string? Code { get; init; }
 
     public bool Labeled { get; init; } = false;

@@ -1,0 +1,235 @@
+line_info:
+  id: saikyo
+  name_jp: 埼京線
+  name_en: Saikyō Line
+  line_color: "#0CA777"
+  code: JA
+train_info:
+  - id: 759K
+    type: 各駅停車
+    terminal: 32201
+  - id: 1349F
+    type: 快速
+    terminal: 32205
+map_info:
+  stations: saikyo_stations.json
+  route: saikyo_route.json
+stations:
+  - id: 32094
+    line_code: R
+    line_color: "#35207E"
+    number: 1
+    name_jp: 新木場
+    name_en: Shin-kiba
+    melody:
+  - id: 32095
+    line_code: R
+    line_color: "#35207E"
+    number: 2
+    name_jp: 東雲
+    name_en: Shinonome
+    melody:
+  - id: 32096
+    line_code: R
+    line_color: "#35207E"
+    number: 3
+    name_jp: 国際展示場
+    name_en: Kokusai-tenjijō
+    melody:
+  - id: 32097
+    line_code: R
+    line_color: "#35207E"
+    number: 4
+    name_jp: 東京テレポート
+    name_en: Tokyo Teleport
+    melody:
+  - id: 32098
+    line_code: R
+    line_color: "#35207E"
+    number: 5
+    name_jp: 天王洲アイル
+    name_en: Tennōzu Isle
+    melody:
+  - id: 32099
+    line_code: R
+    line_color: "#35207E"
+    number: 6
+    name_jp: 品川シーサイド
+    name_en: Shinagawa Seaside
+    melody:
+  - id: 32100
+    line_code: R
+    line_color: "#35207E"
+    number: 7
+    name_jp: 大井町
+    name_en: Ōimachi
+    melody:
+  - id: 32101
+    number: 8
+    name_jp: 大崎
+    name_en: Ōsaki
+    code: OSK
+    melody:
+      - JRE-IKST-006-02.mp3
+      - JRE-IKST-006-01.mp3
+  - id: 32102
+    number: 9
+    name_jp: 恵比寿
+    name_en: Ebisu
+    code: EBS
+    melody:
+      - 第三の男 Ver.G.mp3
+  - id: 32103
+    number: 10
+    name_jp: 渋谷
+    name_en: Shibuya
+    code: SBY
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32104
+    number: 11
+    name_jp: 新宿
+    name_en: Shinjuku
+    code: SJK
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32105
+    number: 12
+    name_jp: 池袋
+    name_en: Ikebukuro
+    code: IKB
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32106
+    number: 13
+    name_jp: 板橋
+    name_en: Itabashi
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32107
+    number: 14
+    name_jp: 十条
+    name_en: Jūjō
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32108
+    number: 15
+    name_jp: 赤羽
+    name_en: Akabane
+    code: ABN
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32109
+    number: 16
+    name_jp: 北赤羽
+    name_en: Kita-Akabane
+    skip_train:
+      - 1349F
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32110
+    number: 17
+    name_jp: 浮間舟渡
+    name_en: Ukimafunado
+    skip_train:
+      - 1349F
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32111
+    number: 18
+    name_jp: 戸田公園
+    name_en: Toda-Kōen
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32112
+    number: 19
+    name_jp: 戸田
+    name_en: Toda
+    skip_train:
+      - 1349F
+    melody:
+  - id: 32113
+    number: 20
+    name_jp: 北戸田
+    name_en: Kita-Toda
+    skip_train:
+      - 1349F
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32114
+    number: 21
+    name_jp: 武蔵浦和
+    name_en: Musashi-Urawa
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32115
+    number: 22
+    name_jp: 中浦和
+    name_en: Naka-Urawa
+    melody:
+  - id: 32116
+    number: 23
+    name_jp: 南与野
+    name_en: Minami-Yono
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32117
+    number: 24
+    name_jp: 与野本町
+    name_en: Yono-Hommachi
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32118
+    number: 25
+    name_jp: 北与野
+    name_en: Kita-Yono
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32201
+    number: 26
+    name_jp: 大宮
+    name_en: Ōmiya
+    code: OMY
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32202
+    line_code: 
+    line_color: "#A9A49E"
+    name_jp: 日進
+    name_en: Nisshin
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32211
+    line_code: 
+    line_color: "#A9A49E"
+    name_jp: 西大宮
+    name_en: Nishi-Ōmiya
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32203
+    line_code: 
+    line_color: "#A9A49E"
+    name_jp: 指扇
+    name_en: Sashiōgi
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32204
+    line_code: 
+    line_color: "#A9A49E"
+    name_jp: 南古谷
+    name_en: Minami-Furuya
+    melody:
+      - JRE-IKST-006-02.mp3
+  - id: 32205
+    line_code: 
+    line_color: "#A9A49E"
+    name_jp: 川越
+    name_en: Kawagoe
+    melody:
+      - JRE-IKST-006-02.mp3
+
+
+
+
+
+

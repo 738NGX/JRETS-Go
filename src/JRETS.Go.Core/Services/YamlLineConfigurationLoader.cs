@@ -59,6 +59,8 @@ public sealed class YamlLineConfigurationLoader
             Number = station.Number,
             NameJp = station.NameJp,
             NameEn = station.NameEn,
+            LineCodeOverride = station.LineCode,
+            LineColorOverride = station.LineColor,
             Code = station.Code,
             Pa = ParsePa(station),
             Melody = station.Melody ?? [],
@@ -187,6 +189,10 @@ public sealed class YamlLineConfigurationLoader
         public required string NameJp { get; init; }
 
         public required string NameEn { get; init; }
+
+        public string? LineCode { get; init; }
+
+        public string? LineColor { get; init; }
 
         public string? Code { get; init; }
 

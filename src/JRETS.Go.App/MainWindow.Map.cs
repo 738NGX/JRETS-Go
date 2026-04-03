@@ -281,41 +281,84 @@ public partial class MainWindow
                 }
             }
 
-            var lineColor = (Color)ColorConverter.ConvertFromString(_lineConfiguration?.LineInfo.LineColor ?? "#00B2E5");
-            var lineBrush = new SolidColorBrush(lineColor);
+            var fallbackLineBrush = ResolveBrushForLineColor(_lineConfiguration?.LineInfo.LineColor);
 
-            if (displayRouteCoords.Length > 1)
+            if (routeCoords.Length > 1)
             {
-                var projectedRoute = new List<Point>(displayRouteCoords.Length);
-                foreach (var coord in displayRouteCoords)
+                var colorSegments = BuildRouteColorSegments(routeCoords);
+                if (colorSegments.Count > 0)
                 {
-                    if (coord.Length < 2)
+                    foreach (var segment in colorSegments)
                     {
-                        continue;
+                        var projectedRoute = new List<Point>(segment.Coordinates.Length);
+                        foreach (var coord in segment.Coordinates)
+                        {
+                            if (coord.Length < 2)
+                            {
+                                continue;
+                            }
+
+                            projectedRoute.Add(ProjectToMiniMap(coord[0], coord[1], viewport));
+                        }
+
+                        var sanitizedRoute = SanitizeRoutePoints(projectedRoute);
+                        var smoothedRoute = SmoothPolylineChaikin(sanitizedRoute, iterations: 2);
+                        if (smoothedRoute.Count < 2)
+                        {
+                            continue;
+                        }
+
+                        var polyline = new System.Windows.Shapes.Polyline
+                        {
+                            Stroke = ResolveBrushForLineColor(segment.LineColor),
+                            StrokeThickness = 3,
+                            StrokeLineJoin = PenLineJoin.Round,
+                            StrokeStartLineCap = PenLineCap.Round,
+                            StrokeEndLineCap = PenLineCap.Round,
+                            Opacity = 0.9
+                        };
+
+                        foreach (var p in smoothedRoute)
+                        {
+                            polyline.Points.Add(p);
+                        }
+
+                        MiniMapCanvas.Children.Add(polyline);
+                    }
+                }
+                else if (displayRouteCoords.Length > 1)
+                {
+                    var projectedRoute = new List<Point>(displayRouteCoords.Length);
+                    foreach (var coord in displayRouteCoords)
+                    {
+                        if (coord.Length < 2)
+                        {
+                            continue;
+                        }
+
+                        projectedRoute.Add(ProjectToMiniMap(coord[0], coord[1], viewport));
                     }
 
-                    projectedRoute.Add(ProjectToMiniMap(coord[0], coord[1], viewport));
+                    var sanitizedRoute = SanitizeRoutePoints(projectedRoute);
+                    var smoothedRoute = SmoothPolylineChaikin(sanitizedRoute, iterations: 2);
+
+                    var polyline = new System.Windows.Shapes.Polyline
+                    {
+                        Stroke = fallbackLineBrush,
+                        StrokeThickness = 3,
+                        StrokeLineJoin = PenLineJoin.Round,
+                        StrokeStartLineCap = PenLineCap.Round,
+                        StrokeEndLineCap = PenLineCap.Round,
+                        Opacity = 0.9
+                    };
+
+                    foreach (var p in smoothedRoute)
+                    {
+                        polyline.Points.Add(p);
+                    }
+
+                    MiniMapCanvas.Children.Add(polyline);
                 }
-
-                var sanitizedRoute = SanitizeRoutePoints(projectedRoute);
-                var smoothedRoute = SmoothPolylineChaikin(sanitizedRoute, iterations: 2);
-
-                var polyline = new System.Windows.Shapes.Polyline
-                {
-                    Stroke = lineBrush,
-                    StrokeThickness = 3,
-                    StrokeLineJoin = PenLineJoin.Round,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round,
-                    Opacity = 0.9
-                };
-
-                foreach (var p in smoothedRoute)
-                {
-                    polyline.Points.Add(p);
-                }
-
-                MiniMapCanvas.Children.Add(polyline);
             }
 
             if (!snapshot?.DoorOpen ?? false)
@@ -366,7 +409,9 @@ public partial class MainWindow
                 {
                     Width = isHighlighted ? 11 : 7,
                     Height = isHighlighted ? 11 : 7,
-                    Fill = isHighlighted ? Brushes.Red : lineBrush,
+                    Fill = isHighlighted
+                        ? Brushes.Red
+                        : ResolveBrushForLineColor(ResolveEffectiveStationLineColor(FindStationById(station.Id))),
                     Stroke = Brushes.White,
                     StrokeThickness = isHighlighted ? 2.0 : 1.5
                 };
@@ -776,6 +821,53 @@ public partial class MainWindow
         return true;
     }
 
+    private IReadOnlyList<RouteColorSegment> BuildRouteColorSegments(IReadOnlyList<RoutePointEntry> routeCoords)
+    {
+        var result = new List<RouteColorSegment>();
+        if (_currentMapStations is null || _currentMapStations.Length < 2 || _lineConfiguration?.Stations is null)
+        {
+            return result;
+        }
+
+        var mapStationById = _currentMapStations
+            .Where(x => x.Coordinates.Length >= 2)
+            .GroupBy(x => x.Id)
+            .ToDictionary(x => x.Key, x => x.First());
+
+        var orderedLineStations = _lineConfiguration.Stations;
+
+        for (var i = 0; i < orderedLineStations.Count - 1; i++)
+        {
+            var fromLineStation = orderedLineStations[i];
+            var toLineStation = orderedLineStations[i + 1];
+            if (fromLineStation.Id == toLineStation.Id)
+            {
+                continue;
+            }
+
+            if (!mapStationById.TryGetValue(fromLineStation.Id, out var from)
+                || !mapStationById.TryGetValue(toLineStation.Id, out var to))
+            {
+                continue;
+            }
+
+            var lineColor = ResolveEffectiveSegmentLineColor(fromLineStation.Id, toLineStation.Id);
+            var segmentCoords = BuildRouteSegmentCoords(routeCoords, from, to);
+            if (segmentCoords.Length < 2)
+            {
+                continue;
+            }
+
+            result.Add(new RouteColorSegment
+            {
+                LineColor = lineColor,
+                Coordinates = segmentCoords
+            });
+        }
+
+        return result;
+    }
+
     private static double[][] BuildRouteSegmentCoords(IReadOnlyList<RoutePointEntry> routeCoords, StationMapData fromStation, StationMapData toStation)
     {
         var minKm = Math.Min(fromStation.Displacement, toStation.Displacement);
@@ -783,27 +875,17 @@ public partial class MainWindow
 
         var segment = routeCoords
             .Where(x => x.DistanceKm >= minKm && x.DistanceKm <= maxKm && x.Coordinates.Length >= 2)
-            .Select(x => x.Coordinates)
+            .Select(x => (DistanceKm: x.DistanceKm, Coordinates: x.Coordinates))
             .ToList();
 
         if (TryInterpolateRouteCoordinate(routeCoords, minKm, out var startCoord))
         {
-            segment.Add(startCoord);
+            segment.Add((minKm, startCoord));
         }
 
         if (TryInterpolateRouteCoordinate(routeCoords, maxKm, out var endCoord))
         {
-            segment.Add(endCoord);
-        }
-
-        if (fromStation.Coordinates.Length >= 2)
-        {
-            segment.Add(fromStation.Coordinates);
-        }
-
-        if (toStation.Coordinates.Length >= 2)
-        {
-            segment.Add(toStation.Coordinates);
+            segment.Add((maxKm, endCoord));
         }
 
         if (segment.Count < 2)
@@ -815,7 +897,47 @@ public partial class MainWindow
             ];
         }
 
-        return segment.ToArray();
+        var ordered = segment
+            .OrderBy(x => x.DistanceKm)
+            .ToList();
+
+        var result = new List<double[]>(ordered.Count);
+        double? lastAcceptedDistanceKm = null;
+        const double duplicateDistanceToleranceKm = 0.00001;
+        foreach (var item in ordered)
+        {
+            if (item.Coordinates.Length < 2)
+            {
+                continue;
+            }
+
+            if (result.Count > 0)
+            {
+                var previous = result[^1];
+                var samePoint = Math.Abs(previous[0] - item.Coordinates[0]) < 1e-9
+                    && Math.Abs(previous[1] - item.Coordinates[1]) < 1e-9;
+                var sameDistance = lastAcceptedDistanceKm.HasValue
+                    && Math.Abs(item.DistanceKm - lastAcceptedDistanceKm.Value) < duplicateDistanceToleranceKm;
+                if (samePoint || sameDistance)
+                {
+                    continue;
+                }
+            }
+
+            result.Add(item.Coordinates);
+            lastAcceptedDistanceKm = item.DistanceKm;
+        }
+
+        if (result.Count < 2)
+        {
+            return
+            [
+                fromStation.Coordinates,
+                toStation.Coordinates
+            ];
+        }
+
+        return result.ToArray();
     }
 
     private void SetMapStatus(string status)
@@ -1241,6 +1363,13 @@ public partial class MainWindow
         public required double DistanceKm { get; init; }
 
         public required double[] Coordinates { get; init; }
+    }
+
+    private sealed class RouteColorSegment
+    {
+        public required string LineColor { get; init; }
+
+        public required double[][] Coordinates { get; init; }
     }
 
     private sealed class RunningSegmentMapping

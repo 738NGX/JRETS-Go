@@ -34,5 +34,12 @@ paths:
   - tokaido/tokyo_ito/3023M.tse:
       - line_id: tokaido
         train_id: 3023M
+  - saikyo/osaki_kawagoe/759K.tse:
+      - line_id: saikyo
+        train_id: 759K
+  - saikyo/osaki_kawagoe/1349F.tse:
+      - line_id: saikyo
+        train_id: 1349F
+
 
   

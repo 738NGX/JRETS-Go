@@ -69,7 +69,7 @@ public partial class MainWindow
         UpdateLatchedStationId(snapshot, state);
         var stationContext = BuildStationContext(snapshot, state);
 
-        ApplyLineColor();
+        ApplyLineColor(snapshot.DoorOpen, stationContext.HudDisplayStation, stationContext.MapFromStationId, stationContext.MapToStationId);
         var serviceTypeText = GetServiceTypeDisplayName();
         var hasServiceTypeText = !string.IsNullOrWhiteSpace(serviceTypeText);
         ServiceTypeTextBlock.Text = hasServiceTypeText ? serviceTypeText : string.Empty;
@@ -83,8 +83,8 @@ public partial class MainWindow
         NextStationStatusTextBlock.Text = statusText;
 
         var hasStationCode = displayStation is not null && !string.IsNullOrWhiteSpace(displayStation.Code);
-        var lineCodeText = _lineConfiguration.LineInfo.Code;
-        var lineNumberText = displayStation is null ? string.Empty : displayStation.Number.ToString("00");
+        var lineCodeText = ResolveEffectiveLineCode(displayStation);
+        var lineNumberText = displayStation is null || displayStation.Number <= 0 ? string.Empty : displayStation.Number.ToString("00");
         var hasLineCode = !string.IsNullOrWhiteSpace(lineCodeText);
         var hasLineNumber = !string.IsNullOrWhiteSpace(lineNumberText);
         var showStationCodeBadge = hasLineCode && hasLineNumber;
