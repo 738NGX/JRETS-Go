@@ -6,6 +6,21 @@ namespace JRETS.Go.Core.Services;
 
 public sealed class YamlMemoryOffsetsConfigurationLoader
 {
+    private static readonly HashSet<string> SupportedSignatureFields = new(StringComparer.Ordinal)
+    {
+        "next_station_id",
+        "door_state",
+        "current_time_seconds",
+        "current_time_minutes",
+        "current_time_hours",
+        "timetable_second",
+        "timetable_minute",
+        "timetable_hour",
+        "current_distance",
+        "target_stop_distance",
+        "line_path"
+    };
+
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
         .WithNamingConvention(UnderscoredNamingConvention.Instance)
         .IgnoreUnmatchedProperties()
@@ -27,10 +42,13 @@ public sealed class YamlMemoryOffsetsConfigurationLoader
         var yaml = _deserializer.Deserialize<MemoryOffsetsYaml>(content)
             ?? throw new InvalidOperationException("Offsets config file is empty.");
 
-        if (yaml.ProcessName is null || yaml.ModuleName is null || yaml.Offsets is null)
+        if (yaml.ProcessName is null || yaml.ModuleName is null)
         {
-            throw new InvalidOperationException("process_name, module_name and offsets sections are required.");
+            throw new InvalidOperationException("process_name and module_name are required.");
         }
+
+        var signatures = ParseSignatures(yaml.Signatures);
+        var offsets = yaml.Offsets ?? new OffsetsYaml();
 
         return new MemoryOffsetsConfiguration
         {
@@ -38,18 +56,96 @@ public sealed class YamlMemoryOffsetsConfigurationLoader
             ModuleName = yaml.ModuleName,
             Offsets = new MemoryOffsets
             {
-                NextStationId = ParseOffset(yaml.Offsets.NextStationId, nameof(yaml.Offsets.NextStationId)),
-                DoorState = ParseOffset(yaml.Offsets.DoorState, nameof(yaml.Offsets.DoorState)),
-                CurrentTimeSeconds = ParseOffset(yaml.Offsets.CurrentTimeSeconds, nameof(yaml.Offsets.CurrentTimeSeconds)),
-                CurrentTimeMinutes = ParseOffset(yaml.Offsets.CurrentTimeMinutes, nameof(yaml.Offsets.CurrentTimeMinutes)),
-                CurrentTimeHours = ParseOffset(yaml.Offsets.CurrentTimeHours, nameof(yaml.Offsets.CurrentTimeHours)),
-                TimetableSecond = ParseOffset(yaml.Offsets.TimetableSecond, nameof(yaml.Offsets.TimetableSecond)),
-                TimetableMinute = ParseOffset(yaml.Offsets.TimetableMinute, nameof(yaml.Offsets.TimetableMinute)),
-                TimetableHour = ParseOffset(yaml.Offsets.TimetableHour, nameof(yaml.Offsets.TimetableHour)),
-                CurrentDistance = ParseOffset(yaml.Offsets.CurrentDistance, nameof(yaml.Offsets.CurrentDistance)),
-                TargetStopDistance = ParseOffset(yaml.Offsets.TargetStopDistance, nameof(yaml.Offsets.TargetStopDistance)),
-                LinePath = ParseOptionalOffset(yaml.Offsets.LinePath)
+                NextStationId = ParseOffsetOrSignature(offsets.NextStationId, "next_station_id", signatures),
+                DoorState = ParseOffsetOrSignature(offsets.DoorState, "door_state", signatures),
+                CurrentTimeSeconds = ParseOffsetOrSignature(offsets.CurrentTimeSeconds, "current_time_seconds", signatures),
+                CurrentTimeMinutes = ParseOffsetOrSignature(offsets.CurrentTimeMinutes, "current_time_minutes", signatures),
+                CurrentTimeHours = ParseOffsetOrSignature(offsets.CurrentTimeHours, "current_time_hours", signatures),
+                TimetableSecond = ParseOffsetOrSignature(offsets.TimetableSecond, "timetable_second", signatures),
+                TimetableMinute = ParseOffsetOrSignature(offsets.TimetableMinute, "timetable_minute", signatures),
+                TimetableHour = ParseOffsetOrSignature(offsets.TimetableHour, "timetable_hour", signatures),
+                CurrentDistance = ParseOffsetOrSignature(offsets.CurrentDistance, "current_distance", signatures),
+                TargetStopDistance = ParseOffsetOrSignature(offsets.TargetStopDistance, "target_stop_distance", signatures),
+                LinePath = ParseOptionalOffset(offsets.LinePath)
+            },
+            Signatures = signatures
+        };
+    }
+
+    private static long ParseOffsetOrSignature(
+        string? value,
+        string fieldName,
+        IReadOnlyDictionary<string, MemoryAddressSignature> signatures)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            return ParseOffset(value, fieldName);
+        }
+
+        if (signatures.ContainsKey(fieldName))
+        {
+            return 0;
+        }
+
+        throw new InvalidOperationException($"Offset {fieldName} is required unless signatures.{fieldName} is configured.");
+    }
+
+    private static IReadOnlyDictionary<string, MemoryAddressSignature> ParseSignatures(
+        IReadOnlyDictionary<string, SignatureYaml>? signatures)
+    {
+        if (signatures is null || signatures.Count == 0)
+        {
+            return new Dictionary<string, MemoryAddressSignature>(StringComparer.Ordinal);
+        }
+
+        var result = new Dictionary<string, MemoryAddressSignature>(StringComparer.Ordinal);
+        foreach (var (fieldName, signature) in signatures)
+        {
+            if (string.IsNullOrWhiteSpace(fieldName) || signature is null || string.IsNullOrWhiteSpace(signature.Pattern))
+            {
+                throw new InvalidOperationException("Each signatures entry requires a field name and pattern.");
             }
+
+            if (!SupportedSignatureFields.Contains(fieldName))
+            {
+                throw new InvalidOperationException($"Unsupported signatures field '{fieldName}'.");
+            }
+
+            var pointerOffsets = signature.PointerOffsets is null
+                ? Array.Empty<long>()
+                : signature.PointerOffsets.Select(value => ParseOffset(value, $"signatures.{fieldName}.pointer_offsets")).ToArray();
+            var pointerSize = signature.PointerSize ?? 4;
+            if (pointerSize is not 4 and not 8)
+            {
+                throw new InvalidOperationException($"signatures.{fieldName}.pointer_size must be 4 or 8.");
+            }
+
+            result[fieldName] = new MemoryAddressSignature
+            {
+                Pattern = signature.Pattern.Trim(),
+                AddressMode = ParseAddressMode(signature.AddressMode, fieldName),
+                OperandOffset = signature.OperandOffset ?? 0,
+                MatchOffset = signature.MatchOffset ?? 0,
+                AddressOffset = string.IsNullOrWhiteSpace(signature.AddressOffset)
+                    ? 0
+                    : ParseOffset(signature.AddressOffset, $"signatures.{fieldName}.address_offset"),
+                PointerOffsets = pointerOffsets,
+                PointerSize = pointerSize
+            };
+        }
+
+        return result;
+    }
+
+    private static MemorySignatureAddressMode ParseAddressMode(string? value, string fieldName)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "match" => MemorySignatureAddressMode.Match,
+            "absolute32" or null or "" => MemorySignatureAddressMode.Absolute32,
+            "absolute64" => MemorySignatureAddressMode.Absolute64,
+            "relative32" => MemorySignatureAddressMode.Relative32,
+            _ => throw new InvalidOperationException($"Unsupported signatures.{fieldName}.address_mode '{value}'.")
         };
     }
 
@@ -90,6 +186,25 @@ public sealed class YamlMemoryOffsetsConfigurationLoader
         public string? ModuleName { get; init; }
 
         public OffsetsYaml? Offsets { get; init; }
+
+        public Dictionary<string, SignatureYaml>? Signatures { get; init; }
+    }
+
+    private sealed class SignatureYaml
+    {
+        public string? Pattern { get; init; }
+
+        public string? AddressMode { get; init; }
+
+        public int? OperandOffset { get; init; }
+
+        public int? MatchOffset { get; init; }
+
+        public string? AddressOffset { get; init; }
+
+        public List<string>? PointerOffsets { get; init; }
+
+        public int? PointerSize { get; init; }
     }
 
     private sealed class OffsetsYaml

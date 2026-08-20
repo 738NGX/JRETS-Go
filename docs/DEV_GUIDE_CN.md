@@ -287,9 +287,9 @@ configs/
    - 修改加速度：max_acceleration_ms2
    - 更新勾选参数等
 
-#### 场景2：更新内存偏移量 (memory-offsets.yaml)
+#### 场景2：更新内存定位 (memory-offsets.yaml)
 
-当游戏版本更新导致内存结构变化时：
+默认方式是“模块基址 + RVA”。它已避免 ASLR 的影响，但游戏重新编译后 RVA 往往会变化：
 
 ```yaml
 offsets:
@@ -299,7 +299,58 @@ offsets:
   # ... 其他偏移量
 ```
 
-使用 Cheat Engine 工程文件重新扫描获得新的偏移量。
+从 v1.0.0 起，可以为任意字段配置**代码特征（AOB 签名）**。附加进程时，应用会在 `module_name` 的内存映像中查找该特征，从匹配指令中解析出数据地址。签名字段优先于同名 RVA；因此可逐字段迁移，并保留 RVA 作为没有签名字段的兼容回退。
+
+```yaml
+# offsets 可以与 signatures 并存；已配置签名的字段不再使用其 RVA。
+signatures:
+  current_time_seconds:
+    # 示例格式。必须替换成在目标游戏版本验证过的特征，不能原样复制。
+    pattern: "A1 ?? ?? ?? ?? 85 C0"
+    address_mode: absolute32
+    operand_offset: 1
+
+  # x64 中常见的 RIP-relative 访问：地址 = 位移字段末尾 + signed rel32
+  current_distance:
+    pattern: "F2 0F 10 05 ?? ?? ?? ??"
+    address_mode: relative32
+    operand_offset: 4
+
+  # 同一个代码锚点定位到状态块起点后，可派生其内字段。
+  current_time_minutes:
+    pattern: "48 89 05 ?? ?? ?? ?? C7 05 ?? ?? ?? ??"
+    address_mode: relative32
+    operand_offset: 3
+    address_offset: "0x8"
+
+  # 若指令引用的是全局对象指针，可解引用并进入对象字段。
+  target_stop_distance:
+    pattern: "A1 ?? ?? ?? ?? 8B 48 10"
+    address_mode: absolute32
+    operand_offset: 1
+    pointer_offsets: ["0x30"] # *globalPointer + 0x30
+    pointer_size: 4            # 目标进程为 32 位；64 位进程填 8
+```
+
+支持的 `address_mode`：
+
+- `absolute32`（默认）：读取匹配处 `operand_offset` 的 4 字节绝对地址，适合 32 位 `mov ...,[imm32]` 一类指令。
+- `absolute64`：读取 8 字节绝对地址。
+- `relative32`：把 4 字节有符号位移解释为“位移字段末尾”相对地址，适合 x64 RIP-relative 指令。
+- `match`：直接使用匹配起始地址加 `match_offset`，通常配合 `pointer_offsets` 使用。
+
+`address_offset`（可选）会在地址操作数解码后、指针解引用前追加一个有符号字节偏移。它适用于同一全局状态块中的多个字段：每个字段可复用同一个代码特征，但给出不同的 `address_offset`。如果一个特征在多处出现、但每一处都解码到同一个地址，解析器会接受它；若解码到不同地址则会拒绝附加，避免误匹配。
+
+完整使用签名时，`offsets` 中已被签名覆盖的必填字段可以省略；未配置签名的字段仍必须提供 RVA。`line_path` 始终是可选字段。
+
+推荐的逆向流程：
+
+1. 在游戏中让单一已知值发生变化（例如时钟秒数或站号），先找出数据地址。
+2. 用调试器的“查找访问/写入此地址”定位真正读取或更新该值的代码，而不是对数据区做字节扫描。
+3. 从该指令周围挑选足够长、跨版本稳定的操作码；把绝对地址、RIP 位移、调用位移及其他易变立即数写成 `??`。
+4. 在至少两个游戏版本和多个线路/运行图中验证它只命中一次，且解析后的地址持续产生合理值。
+
+签名匹配到 0 个或多个位置时，程序会拒绝附加并显示字段名和匹配数，避免静默读取错误地址。即使使用签名，游戏把访问代码或数据结构大幅重写时仍可能需要更新特征；这不能由任何纯内存方案完全消除。若游戏日后提供官方遥测、Mod API、日志或 IPC 接口，应优先将其作为数据源。
 
 #### 场景3：配置自动更新系统 (update.yaml)
 

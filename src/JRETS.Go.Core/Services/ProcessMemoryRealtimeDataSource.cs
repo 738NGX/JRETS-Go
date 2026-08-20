@@ -14,12 +14,14 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
     private const int LinePathReadLength = 1024;
 
     private readonly MemoryOffsetsConfiguration _configuration;
-    private readonly SnapshotReadPlan _snapshotReadPlan;
-    private readonly SnapshotReadPlan _snapshotReadPlanWithoutStationId;
+    private SnapshotReadPlan _snapshotReadPlan;
+    private SnapshotReadPlan _snapshotReadPlanWithoutStationId;
 
     private Process? _process;
     private nint _processHandle;
     private nint _moduleBaseAddress;
+    private int _moduleMemorySize;
+    private MemoryOffsets _resolvedOffsets;
 
     public string LastAttachError { get; private set; } = string.Empty;
 
@@ -28,6 +30,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
         _configuration = configuration;
         _snapshotReadPlan = BuildSnapshotReadPlan(configuration.Offsets);
         _snapshotReadPlanWithoutStationId = BuildSnapshotReadPlanWithoutStationId(configuration.Offsets);
+        _resolvedOffsets = configuration.Offsets;
     }
 
     public bool TryAttach()
@@ -43,6 +46,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
         }
 
         nint moduleBaseAddress;
+        int moduleMemorySize;
         try
         {
             var module = process.Modules.Cast<ProcessModule>()
@@ -54,6 +58,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
             }
 
             moduleBaseAddress = module.BaseAddress;
+            moduleMemorySize = module.ModuleMemorySize;
         }
         catch (Exception ex)
         {
@@ -71,6 +76,21 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
         _process = process;
         _processHandle = handle;
         _moduleBaseAddress = moduleBaseAddress;
+        _moduleMemorySize = moduleMemorySize;
+
+        try
+        {
+            _resolvedOffsets = ResolveOffsets();
+            _snapshotReadPlan = BuildSnapshotReadPlan(_resolvedOffsets);
+            _snapshotReadPlanWithoutStationId = BuildSnapshotReadPlanWithoutStationId(_resolvedOffsets);
+        }
+        catch (Exception ex)
+        {
+            LastAttachError = $"Failed to resolve memory locations: {ex.Message}";
+            Release();
+            return false;
+        }
+
         LastAttachError = string.Empty;
         return true;
     }
@@ -161,8 +181,172 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
             TimetableHour = ReadInt32(segmentBuffers, readPlan.TimetableHourField),
             CurrentDistanceMeters = ReadDouble(segmentBuffers, readPlan.CurrentDistanceField),
             TargetStopDistanceMeters = ReadDouble(segmentBuffers, readPlan.TargetStopDistanceField),
-            LinePath = ReadLinePath(_configuration.Offsets.LinePath)
+            LinePath = ReadLinePath(_resolvedOffsets.LinePath)
         };
+    }
+
+    private MemoryOffsets ResolveOffsets()
+    {
+        if (_configuration.Signatures.Count == 0)
+        {
+            return _configuration.Offsets;
+        }
+
+        if (_moduleMemorySize <= 0)
+        {
+            throw new InvalidOperationException("Target module has no readable memory image.");
+        }
+
+        var moduleBytes = ReadBytes(0, _moduleMemorySize);
+        var offsets = _configuration.Offsets;
+
+        return new MemoryOffsets
+        {
+            NextStationId = ResolveOffset("next_station_id", offsets.NextStationId, moduleBytes),
+            DoorState = ResolveOffset("door_state", offsets.DoorState, moduleBytes),
+            CurrentTimeSeconds = ResolveOffset("current_time_seconds", offsets.CurrentTimeSeconds, moduleBytes),
+            CurrentTimeMinutes = ResolveOffset("current_time_minutes", offsets.CurrentTimeMinutes, moduleBytes),
+            CurrentTimeHours = ResolveOffset("current_time_hours", offsets.CurrentTimeHours, moduleBytes),
+            TimetableSecond = ResolveOffset("timetable_second", offsets.TimetableSecond, moduleBytes),
+            TimetableMinute = ResolveOffset("timetable_minute", offsets.TimetableMinute, moduleBytes),
+            TimetableHour = ResolveOffset("timetable_hour", offsets.TimetableHour, moduleBytes),
+            CurrentDistance = ResolveOffset("current_distance", offsets.CurrentDistance, moduleBytes),
+            TargetStopDistance = ResolveOffset("target_stop_distance", offsets.TargetStopDistance, moduleBytes),
+            LinePath = ResolveOffset("line_path", offsets.LinePath, moduleBytes)
+        };
+    }
+
+    private long ResolveOffset(string fieldName, long fallbackOffset, byte[] moduleBytes)
+    {
+        if (!_configuration.Signatures.TryGetValue(fieldName, out var signature))
+        {
+            return fallbackOffset;
+        }
+
+        var address = ResolveSignatureAddress(fieldName, signature, moduleBytes);
+        return checked(address.ToInt64() - _moduleBaseAddress.ToInt64());
+    }
+
+    private nint ResolveSignatureAddress(string fieldName, MemoryAddressSignature signature, byte[] moduleBytes)
+    {
+        var pattern = ParseBytePattern(signature.Pattern, fieldName);
+        var matchIndices = FindPatternMatches(moduleBytes, pattern);
+        if (matchIndices.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Signature '{fieldName}' did not match anywhere in the module image.");
+        }
+
+        var decodedAddresses = matchIndices
+            .Select(matchIndex => DecodeSignatureAddress(fieldName, signature, moduleBytes, matchIndex))
+            .Distinct()
+            .ToArray();
+        if (decodedAddresses.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Signature '{fieldName}' matched {matchIndices.Count} locations that resolve to {decodedAddresses.Length} different addresses.");
+        }
+
+        var address = (nint)checked(decodedAddresses[0] + signature.AddressOffset);
+        foreach (var offset in signature.PointerOffsets)
+        {
+            var pointerBytes = ReadBytesAt(address, signature.PointerSize);
+            var pointer = signature.PointerSize == sizeof(uint)
+                ? BitConverter.ToUInt32(pointerBytes, 0)
+                : BitConverter.ToInt64(pointerBytes, 0);
+            if (pointer == 0)
+            {
+                throw new InvalidOperationException($"Signature '{fieldName}' resolved a null pointer.");
+            }
+
+            address = (nint)checked(pointer + offset);
+        }
+
+        return address;
+    }
+
+    private long DecodeSignatureAddress(
+        string fieldName,
+        MemoryAddressSignature signature,
+        byte[] moduleBytes,
+        int matchIndex)
+    {
+        return signature.AddressMode switch
+        {
+            MemorySignatureAddressMode.Match => checked(_moduleBaseAddress.ToInt64() + matchIndex + signature.MatchOffset),
+            MemorySignatureAddressMode.Absolute32 => ReadAbsolute32(fieldName, signature, moduleBytes, matchIndex),
+            MemorySignatureAddressMode.Absolute64 => ReadAbsolute64(fieldName, signature, moduleBytes, matchIndex),
+            MemorySignatureAddressMode.Relative32 => ReadRelative32(fieldName, signature, moduleBytes, matchIndex),
+            _ => throw new InvalidOperationException($"Unsupported address mode for signature '{fieldName}'.")
+        };
+    }
+
+    private static long ReadAbsolute32(string fieldName, MemoryAddressSignature signature, byte[] moduleBytes, int matchIndex)
+    {
+        EnsureOperandFits(moduleBytes, matchIndex, signature.OperandOffset, sizeof(uint), fieldName);
+        return BitConverter.ToUInt32(moduleBytes, matchIndex + signature.OperandOffset);
+    }
+
+    private static long ReadAbsolute64(string fieldName, MemoryAddressSignature signature, byte[] moduleBytes, int matchIndex)
+    {
+        EnsureOperandFits(moduleBytes, matchIndex, signature.OperandOffset, sizeof(long), fieldName);
+        return BitConverter.ToInt64(moduleBytes, matchIndex + signature.OperandOffset);
+    }
+
+    private long ReadRelative32(string fieldName, MemoryAddressSignature signature, byte[] moduleBytes, int matchIndex)
+    {
+        EnsureOperandFits(moduleBytes, matchIndex, signature.OperandOffset, sizeof(int), fieldName);
+        var displacement = BitConverter.ToInt32(moduleBytes, matchIndex + signature.OperandOffset);
+        return checked(_moduleBaseAddress.ToInt64() + matchIndex + signature.OperandOffset + sizeof(int) + displacement);
+    }
+
+    private static byte?[] ParseBytePattern(string pattern, string fieldName)
+    {
+        var tokens = pattern.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0)
+        {
+            throw new InvalidOperationException($"Signature '{fieldName}' has an empty pattern.");
+        }
+
+        return tokens.Select(token => token is "?" or "??"
+            ? (byte?)null
+            : byte.TryParse(token, System.Globalization.NumberStyles.AllowHexSpecifier,
+                System.Globalization.CultureInfo.InvariantCulture, out var value)
+                ? value
+                : throw new InvalidOperationException($"Signature '{fieldName}' has invalid byte '{token}'."))
+            .ToArray();
+    }
+
+    private static List<int> FindPatternMatches(byte[] source, byte?[] pattern)
+    {
+        var matches = new List<int>();
+        for (var start = 0; start <= source.Length - pattern.Length; start++)
+        {
+            var isMatch = true;
+            for (var index = 0; index < pattern.Length; index++)
+            {
+                if (pattern[index] is byte expected && source[start + index] != expected)
+                {
+                    isMatch = false;
+                    break;
+                }
+            }
+
+            if (isMatch)
+            {
+                matches.Add(start);
+            }
+        }
+
+        return matches;
+    }
+
+    private static void EnsureOperandFits(byte[] moduleBytes, int matchIndex, int operandOffset, int operandSize, string fieldName)
+    {
+        if (operandOffset < 0 || matchIndex + operandOffset > moduleBytes.Length - operandSize)
+        {
+            throw new InvalidOperationException($"Signature '{fieldName}' operand falls outside the module image.");
+        }
     }
 
     private string? ReadLinePath(long relativeOffset)
@@ -326,17 +510,24 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
 
     private byte[] ReadBytes(long relativeOffset, int byteCount)
     {
+        return ReadBytesAt(_moduleBaseAddress + (nint)relativeOffset, byteCount, relativeOffset);
+    }
+
+    private byte[] ReadBytesAt(nint absoluteAddress, int byteCount, long? relativeOffsetForError = null)
+    {
         if (_processHandle == nint.Zero)
         {
             throw new InvalidOperationException("Process is not attached.");
         }
 
-        var absoluteAddress = _moduleBaseAddress + (nint)relativeOffset;
         var buffer = new byte[byteCount];
 
         if (!ReadProcessMemory(_processHandle, absoluteAddress, buffer, byteCount, out var bytesRead) || bytesRead != byteCount)
         {
-            throw new InvalidOperationException($"ReadProcessMemory failed at offset 0x{relativeOffset:X}.");
+            var location = relativeOffsetForError is long relativeOffset
+                ? $"offset 0x{relativeOffset:X}"
+                : $"address 0x{absoluteAddress.ToInt64():X}";
+            throw new InvalidOperationException($"ReadProcessMemory failed at {location}.");
         }
 
         return buffer;
@@ -407,6 +598,7 @@ public sealed class ProcessMemoryRealtimeDataSource : IDisposable
 
         _process = null;
         _moduleBaseAddress = nint.Zero;
+        _moduleMemorySize = 0;
     }
 
     public void Dispose()
